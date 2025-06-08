@@ -30,3 +30,22 @@
 *.exe
 *.out
 *.app
+
+# Unreal Engine 기본 제외 파일
+Binaries/
+Content/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/
+.vs/
+.vscode/
+.idea/
+
+# 사용자 설정 파일 제외 (개인 설정)
+# Config/DefaultEditor.ini
+Config/DefaultEditorPerProjectUserSettings.ini
+
+# 로그 파일 제외
+*.log
+*.tmp
