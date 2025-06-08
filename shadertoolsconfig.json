@@ -1,0 +1,9 @@
+{
+  "hlsl.preprocessorDefinitions": {
+  },
+  " hlsl.additionalIncludeDirectories": [
+    "D:/UnrealEngine-5.5.4-release/Engine/Shaders"
+  ],
+  "hlsl.virtualDirectoryMappings": {
+  }
+}
