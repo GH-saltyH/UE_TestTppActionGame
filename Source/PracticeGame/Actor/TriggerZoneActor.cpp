@@ -1,8 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "TriggerZoneActor.h"
-
+#include "../Player/PlayerCharacter.h"
+#include "../Player/QuestComponent.h"
 
 // Sets default values
 ATriggerZoneActor::ATriggerZoneActor()
@@ -10,44 +11,44 @@ ATriggerZoneActor::ATriggerZoneActor()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	//½ºÅ×Æ½ ¸Ş½¬ ÄÄÆ÷³ÍÆ®¸¦ ¼­ºê¿ÀºêÁ§Æ®·Î »ı¼ºÇÏ°í ¹Ş¾ÆµĞ´Ù
+	//ìŠ¤í…Œí‹± ë©”ì‰¬ ì»´í¬ë„ŒíŠ¸ë¥¼ ì„œë¸Œì˜¤ë¸Œì íŠ¸ë¡œ ìƒì„±í•˜ê³  ë°›ì•„ë‘”ë‹¤
 	mStaticMesh = CreateDefaultSubobject<UStaticMeshComponent>
 		(TEXT("StaticMesh"));
 
-	//½ºÅÂÆ½ ¸Ş½¬¸¦ À§ÇÑ Shape ¿¡¼ÂÀ» ·ÎµåÇÑ´Ù
+	//ìŠ¤íƒœí‹± ë©”ì‰¬ë¥¼ ìœ„í•œ Shape ì—ì…‹ì„ ë¡œë“œí•œë‹¤
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> 
 		StaticMeshAsset(
 			TEXT(
 			"/Script/Engine.StaticMesh'/Game/Shape/Cube.Cube'")
 		);
 
-	//·Îµå¿¡ ¼º°øÇÏ¸é ¸Ş½¬ ÄÄÆ÷³ÍÆ®¿¡ Àû¿ëÇÑ´Ù
+	//ë¡œë“œì— ì„±ê³µí•˜ë©´ ë©”ì‰¬ ì»´í¬ë„ŒíŠ¸ì— ì ìš©í•œë‹¤
 	if (StaticMeshAsset.Succeeded())
 		mStaticMesh->SetStaticMesh(StaticMeshAsset.Object);
 
-	//¹Ú½º ÄÄÆ÷³ÍÆ®¸¦ ¼­ºê¿ÀºêÁ§Æ®·Î »ı¼ºÇÏ°í ¹Ş¾ÆµĞ´Ù
+	//ë°•ìŠ¤ ì»´í¬ë„ŒíŠ¸ë¥¼ ì„œë¸Œì˜¤ë¸Œì íŠ¸ë¡œ ìƒì„±í•˜ê³  ë°›ì•„ë‘”ë‹¤
 	mTriggerBox = CreateDefaultSubobject<UBoxComponent>
 		(TEXT("TriggerBox"));
 
-	//¸Ş½¬¸¦ ·çÆ® ÄÄÆ÷³ÍÆ®·Î ÁöÁ¤ÇÑ´Ù
+	//ë©”ì‰¬ë¥¼ ë£¨íŠ¸ ì»´í¬ë„ŒíŠ¸ë¡œ ì§€ì •í•œë‹¤
 	SetRootComponent(mStaticMesh);
 
-	//Æ®¸®°Å¹Ú½º¸¦  ·çÆ®¿¡ ºÎÂøÇÑ´Ù
+	//íŠ¸ë¦¬ê±°ë°•ìŠ¤ë¥¼  ë£¨íŠ¸ì— ë¶€ì°©í•œë‹¤
 	mTriggerBox->SetupAttachment(GetRootComponent());
 
-	/* ¸Ş½¬ ¹× Æ®¸®°Å ¹Ú½ºÀÇ Æ®·£½ºÆû ¼³Á¤ 
-		¹Ú½º ½ºÄÉÀÏ 
+	/* ë©”ì‰¬ ë° íŠ¸ë¦¬ê±° ë°•ìŠ¤ì˜ íŠ¸ëœìŠ¤í¼ ì„¤ì • 
+		ë°•ìŠ¤ ìŠ¤ì¼€ì¼ 
 			(X=1.250000,Y=1.250000,Z=0.050000)
-		Æ®¸®°Å ¹Ú½º Å©±â
+		íŠ¸ë¦¬ê±° ë°•ìŠ¤ í¬ê¸°
 			(X=50.000000,Y=50.000000,Z=32.000000)
-				»ó´ëÀ§Ä¡
+				ìƒëŒ€ìœ„ì¹˜
 				(X=0.000000,Y=0.000000,Z=83.000000)
 	*/
 	mStaticMesh->SetRelativeScale3D(FVector(1.25f, 1.25f, 0.05f));
 	mTriggerBox->SetBoxExtent(FVector(50, 50, 32));
 	mTriggerBox->SetRelativeLocation(FVector(0, 0, 83));
 
-	//Ãæµ¹ ÇÁ·ÎÆÄÀÏ ÁöÁ¤
+	//ì¶©ëŒ í”„ë¡œíŒŒì¼ ì§€ì •
 	mTriggerBox->SetCollisionProfileName(TEXT("Trigger"));
 }
 
@@ -56,13 +57,13 @@ void ATriggerZoneActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	//ÀÌ µ¨¸®°ÔÀÌÆ® ÇÔ¼ö´Â 
-	// mTriggerBox ÀÇ Overlap ÀÌº¥Æ®¿¡¼­ 
-	// TriggerBoxOnOverlap À» È£ÃâÇÏ°Ô µÈ´Ù
+	//ì´ ë¸ë¦¬ê²Œì´íŠ¸ í•¨ìˆ˜ëŠ” 
+	// mTriggerBox ì˜ Overlap ì´ë²¤íŠ¸ì—ì„œ 
+	// TriggerBoxOnOverlap ì„ í˜¸ì¶œí•˜ê²Œ ëœë‹¤
 	mTriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ATriggerZoneActor::TriggerBoxOnOverlap);
 }
 
-//mTriggerBox ÀÇ Overlap ÀÏ ¶§ È£ÃâµÇ´Â ÇÔ¼ö
+//mTriggerBox ì˜ Overlap ì¼ ë•Œ í˜¸ì¶œë˜ëŠ” í•¨ìˆ˜
 void ATriggerZoneActor::TriggerBoxOnOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (bIsTriggered)
@@ -89,6 +90,17 @@ void ATriggerZoneActor::TriggerBoxOnOverlap(UPrimitiveComponent* OverlappedCompo
 				TEXT("TriggerBoxOnOverlap has been called : Just Triggered")
 			);
 		bIsTriggered = true;
+	}
+
+	//TriggerZoneActor ì˜ ì˜¤ë²„ë© ë°”ì¸ë”©í•¨ìˆ˜ ë‚´ë¶€ì´ë‹¤
+	//Arrive ëŒ€ìƒ -> ì´ íŠ¸ë¦¬ê±° ë°•ìŠ¤ë¥¼ ì „ë‹¬í•˜ì—¬ í€˜ìŠ¤íŠ¸ë¥¼ ì²˜ë¦¬ë„ë¡  ë¸Œë¡œë“œìºìŠ¤íŠ¸ í•œë‹¤
+	APlayerCharacter* Player = Cast<APlayerCharacter>(OtherActor);
+	if (Player)
+	{
+		if (UQuestComponent* QuestComponent = Player->GetQuestComponent())
+		{
+			QuestComponent->mOnQuestTriggered.Broadcast(EQuestTaskType::ARRIVE, this);
+		}
 	}
 }
 
