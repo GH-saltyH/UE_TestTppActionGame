@@ -189,7 +189,7 @@ void UAnimInstancePlayer::AnimNotify_AttackStart()
 {
 	UE_LOG(AnimInstLog, Display, TEXT("Notify AttackStart Called"));
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//플래그 충돌 ON : 미구현
 }
 
@@ -197,7 +197,7 @@ void UAnimInstancePlayer::AnimNotify_AttackEnd()
 {
 	UE_LOG(AnimInstLog, Display, TEXT("Notify AttackEnd Called"));
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//플래그 충돌 OFF : 미구현
 }
 
@@ -205,34 +205,34 @@ void UAnimInstancePlayer::AnimNotify_ComboStart()
 {
 	UE_LOG(AnimInstLog, Display, TEXT("Notify ComboStart Called"));
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//플래그 콤보 ON 
-	State->SetState(State->COMBO);
+	StatePtr->SetState(StatePtr->COMBO);
 	//플래그 액팅 OFF -> 이제부터 공격등의 ACTING 유형 행위가 가능해짐
-	State->ClearState(State->ACTING);
+	StatePtr->ClearState(StatePtr->ACTING);
 }
 
 void UAnimInstancePlayer::AnimNotify_ComboEnd()
 {
 	UE_LOG(AnimInstLog, Display, TEXT("Notify ComboEnd Called"));
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//플래그 콤보 ON 
-	State->ClearState(State->COMBO);
+	StatePtr->ClearState(StatePtr->COMBO);
 }
 
 void UAnimInstancePlayer::AnimNotify_LandRecoveryEnd()
 {
 	UE_LOG(AnimInstLog, Display, TEXT("Notify LandEnd Called"));
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 
 	//착지 모션 완료 : LANDING 를 해제한다
 	//다른 애니메이션이 이과정에 도달하기 전에 덮을 수 있기 떄문에 
 	//EndDelegate 함수를 하나 더 바인딩해둔다
 	//OnLandMontageEnd
-	State->ClearState(State->LANDING);
-	State->ClearState(State->ACTING);
+	StatePtr->ClearState(StatePtr->LANDING);
+	StatePtr->ClearState(StatePtr->ACTING);
 }
 
 void UAnimInstancePlayer::OnLandMontageEnd(UAnimMontage* Montage, bool bInterrupted)
@@ -241,10 +241,10 @@ void UAnimInstancePlayer::OnLandMontageEnd(UAnimMontage* Montage, bool bInterrup
 	//착지 모션이 의도보다 빠르게 끝나도 (주로 애님그래프의 조건 복잡성에 의해)
 	
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//렌딩으로인한 이동불가 상태를 해제한다
-	State->ClearState(State->LANDING);
-	State->ClearState(State->ACTING);
+	StatePtr->ClearState(StatePtr->LANDING);
+	StatePtr->ClearState(StatePtr->ACTING);
 	UE_LOG(AnimInstLog, Warning, TEXT("OnLandMontageEnd Called"));
 }
 
@@ -253,10 +253,10 @@ void UAnimInstancePlayer::OnLandBlendOut(UAnimMontage* Montage, bool bInterrupte
 	//델리게이트 바인딩된 함수이다
 	//블렌드 아웃될 때도 이동불가 상태를 해제해준다
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//렌딩으로 인한 이동불가 상태를 해제한다
-	State->ClearState(State->LANDING);
-	State->ClearState(State->ACTING);
+	StatePtr->ClearState(StatePtr->LANDING);
+	StatePtr->ClearState(StatePtr->ACTING);
 	UE_LOG(AnimInstLog, Warning, TEXT("OnLandBlendOut Called"));
 }
 
@@ -265,11 +265,11 @@ void UAnimInstancePlayer::OnAttackMontageEnd(UAnimMontage* Montage, bool bInterr
 	//델리게이트 바인딩된 함수이다
 	//공격 몽타주의 재생이 종료 될 때 호출
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//콤보 가능 해제 
 	//State->ClearState(State->COMBO);
 	//액팅 중 해제
-	State->ClearState(State->ACTING);
+	StatePtr->ClearState(StatePtr->ACTING);
 	UE_LOG(TestGame, Warning, TEXT("OnAttackMontageEnd has been called"));
 }
 
@@ -278,10 +278,10 @@ void UAnimInstancePlayer::OnAttackMontageBlendOut(UAnimMontage* Montage, bool bI
 	//델리게이트 바인딩된 함수이다
 	//공격 몽타주가 블렌드 아웃 될 때 호출
 	APlayerCharacter* PC = Cast<APlayerCharacter>(TryGetPawnOwner());
-	FCharacterState* State = PC->GetCharacterState();
+	FCharacterState* StatePtr = PC->GetCharacterStatePtr();
 	//콤보 가능 해제 
 	//State->ClearState(State->COMBO);
 	//액팅중 해제
-	State->ClearState(State->ACTING);
+	StatePtr->ClearState(StatePtr->ACTING);
 	UE_LOG(TestGame, Warning, TEXT("OnAttackMontageBlendOut has been called"));
 }

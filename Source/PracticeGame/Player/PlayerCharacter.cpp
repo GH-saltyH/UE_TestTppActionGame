@@ -1,9 +1,20 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "PlayerCharacter.h"
-#include "../Player/Animation/AnimInstancePlayer.h"
-//·Î±× Ä«Å×°í¸® ¼³Á¤
+#include "PlayerData.h"
+#include "EnhancedInputSubsystems.h"
+#include "EnhancedInputComponent.h"
+#include "../NPC/Monster/Monster.h"
+#include "../PlayerController/PlayerControllerTestGame.h"
+#include "Animation/AnimInstancePlayer.h"
+#include "Animation/PlayerTemplateAnimInstance.h"
+#include "../UI/MainGame/PlayerStatusHUDWidget.h"
+#include "../UI/Character/Panel/CharacterInfoWidget.h"
+#include "../UI/WidgetManager.h"
+#include "../Data/Item/ItemDataCacheManager.h"
+
+//ë¡œê·¸ ì¹´í…Œê³ ë¦¬ ì„¤ì •
 DEFINE_LOG_CATEGORY(PlayerLog);
 
 // Sets default values
@@ -12,277 +23,431 @@ APlayerCharacter::APlayerCharacter()
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	//ÀÎ½ºÅÏ½º¸¦ ¾ÈÀüÇÏ°Ô ·ÎµåÇÑ´Ù. 
-	// TEXT("°æ·Î") ´Â ¿øÇÏ´Â ¿¡¼ÂÀÇ °æ·Î¸¦ ÂüÁ¶ÇÑ´Ù
-	//SkeletalMesh °´Ã¼¿¡ ·ÎµåÇß´Ù. 
-	static ConstructorHelpers::FObjectFinder<USkeletalMesh> 
-		SkeletalMesh(TEXT(
-			"/Script/Engine.SkeletalMesh'/Game/ParagonCountess/Characters/Heroes/Countess/Meshes/SM_Countess.SM_Countess'"));
-	// ÀÎ½ºÅÏ½º ·Îµå¿¡ ¼º°øÇÏ¸é Ä³¸¯ÅÍ Å¬·¡½ºÀÇ ¸Ş½¬ÄÄÆ÷³ÍÆ®¸¦
-	// ·ÎµåµÈ ¸Ş½¬·Î ¼³Á¤ÇÑ´Ù.
-	if (SkeletalMesh.Succeeded())
-		GetMesh()->SetSkeletalMeshAsset(SkeletalMesh.Object);
-
-	//½ºÄÌ·¹Å»¸Ş½Ã Z = -90.f
-	GetMesh()->SetRelativeLocation(FVector(0, 0, -90.5f));
-	//½ºÄÌ·¹Å»¸Ş½ÃÀÇ Yaw = -90.f
-	GetMesh()->SetRelativeRotation(FRotator(0, -90, 0));
+		//í”Œë ˆì´ì–´ Yaw 180.f
+		SetActorRelativeRotation(FRotator(0, 180, 0));
 	
-	//Ä¸½¶ Àı¹İ ³ôÀÌ = 90.5
-	GetCapsuleComponent()->SetCapsuleHalfHeight(90.5f);
-
-	//ÇÃ·¹ÀÌ¾î Yaw 180.f
-	SetActorRelativeRotation(FRotator(0, 180, 0));
-	
-
 	/*
-		¼­ºê¿ÀºêÁ§Æ® : ÄÄÆ÷³ÍÆ®ÀÇ Ãß°¡
-		½ºÇÁ¸µ¾Ï°ú Ä«¸Ş¶ó ÄÄÆ÷³ÍÆ®¸¦ Ãß°¡ÇÑ´Ù
+		ì„œë¸Œì˜¤ë¸Œì íŠ¸ : ì»´í¬ë„ŒíŠ¸ì˜ ì¶”ê°€
+		ìŠ¤í”„ë§ì•”ê³¼ ì¹´ë©”ë¼ ì»´í¬ë„ŒíŠ¸ë¥¼ ì¶”ê°€í•œë‹¤
 	*/
 	mSpringArm = CreateDefaultSubobject
 		<USpringArmComponent>(TEXT("SpringArm"));
 	mCamera = CreateDefaultSubobject
 		<UCameraComponent>(TEXT("Camera"));
+	mInventoryItemsComponent = CreateDefaultSubobject
+		<UInventoryComponent>(TEXT("InvItems"));
+	mQuestComponent = CreateDefaultSubobject
+		<UQuestComponent>(TEXT("PlayerQuestManager"));
 
 	/*
-		½ºÇÁ¸µ¾ÏÀº ·çÆ® ÄÄÆ÷³ÍÆ®¸¦ ºÎ¸ğ·Î ÇÑ´Ù
-		Ä«¸Ş¶ó´Â ½ºÇÁ¸µ¾ÏÀ» ºÎ¸ğ·Î ÇÑ´Ù
+		ìŠ¤í”„ë§ì•”ì€ ë£¨íŠ¸ ì»´í¬ë„ŒíŠ¸ë¥¼ ë¶€ëª¨ë¡œ í•œë‹¤
+		ì¹´ë©”ë¼ëŠ” ìŠ¤í”„ë§ì•”ì„ ë¶€ëª¨ë¡œ í•œë‹¤
 	*/
-
 	mSpringArm->SetupAttachment(RootComponent);
 	mCamera->SetupAttachment(mSpringArm);
 
 	/* 
-		½ºÇÁ¸µ¾ÏÀÇ Å¸±ê ¾Ï ±æÀÌ¸¦ 300.f ·Î ¼³Á¤ÇÑ´Ù
-		½ºÇÁ¸µ¾ÏÀÇ Pitch  ¸¦ -20 ¸¸Å­ »ó´ëÀûÀ¸·Î È¸ÀüÇÑ´Ù
-		½ºÇÁ¸µ¾ÏÀÇ Z º¤ÅÍÀ§Ä¡¸¦ +39.0f ¸¸Å­ »ó´ëÀûÀ¸·Î ÀÌµ¿ÇÑ´Ù
+		ìŠ¤í”„ë§ì•”ì˜ íƒ€ê¹ƒ ì•” ê¸¸ì´ë¥¼ 300.f ë¡œ ì„¤ì •í•œë‹¤
+		ìŠ¤í”„ë§ì•”ì˜ Pitch  ë¥¼ -20 ë§Œí¼ ìƒëŒ€ì ìœ¼ë¡œ íšŒì „í•œë‹¤
+		ìŠ¤í”„ë§ì•”ì˜ Z ë²¡í„°ìœ„ì¹˜ë¥¼ +39.0f ë§Œí¼ ìƒëŒ€ì ìœ¼ë¡œ ì´ë™í•œë‹¤
 		*/
 	mSpringArm->TargetArmLength = 300.f;
 	mSpringArm->SetRelativeRotation(FRotator(-20, 0, 0));
 	mSpringArm->SetRelativeLocation(FVector(0, 0, 39));
 
-	// mCamera->AttachToComponent(mSpringArm); 
-	// AttachToComponent ´Â ÇØ´ç ÄÄÆ÷³ÍÆ®¸¦ USceneComponent ¿¡ ºÎÂø½ÃÅ²´Ù
+	//ëŒ€ì‹œ ì‚¬ìš´ë“œ ì—ì…‹
+	static ConstructorHelpers::FObjectFinder<USoundWave> SfxDashAsset
+	(TEXT("/Script/Engine.SoundWave'/Game/Sounds/sfx/sfx_dash.sfx_dash'"));
 	
-		/*
-	1. UClass Æ÷ÀÎÅÍ °¡Á®¿À±â
-		: APlayerCharacter ÀÇ UClass Á¤º¸¸¦ °¡Á®¿Â´Ù
-				UClass ´Â ¸®ÇÃ·º¼Ç ½Ã½ºÅÛÀ» ÅëÇØ ÇØ´ç Å¬·¡½ºÀÇ 
-				±âº» Á¤º¸¸¦ ÀúÀåÇÏ´Â ±¸Á¶Ã¼ÀÌ´Ù */
-	//UClass* MyClass = APlayerCharacter::StaticClass();
-	// ÀÌÁ¦ MyClass ´Â APlayerCharacter Å¬·¡½ºÀÇ UClass Á¤º¸¸¦ ÂüÁ¶ÇÑ´Ù
+	if (SfxDashAsset.Succeeded())
+		mSfxDash = SfxDashAsset.Object;
 
-	/*
-	2. CDO °¡Á®¿À±â
-		: GetDafaultObject<ACharacter>()  ·Î   Class Default Object ¸¦ ¹İÈ¯ÇÑ´Ù
-		¹İÈ¯µÈ CDO ´Â ÀÌ Å¬·¡½ºÀÇ ±âº» ÀÎ½ºÅÏ½ºÀÌ´Ù.
-		ACharacter Å¬·¡½ºÀÇ ¸ğµç ÀÎ½ºÅÏ½º°¡ ÀÌ °´Ã¼¸¦ ±â¹İÀ¸·Î »ı¼ºµÈ´Ù´Â ÀÇ¹ÌÀÌ´Ù
-	*/
-	//ACharacter* DefaultCharacter = MyClass->GetDefaultObject();
-	//ÀÌÁ¦ DefaultCharacter ´Â  CPlayerCharacter Å¬·¡½ºÀÇ ±âº» °´Ã¼°¡ µÈ´Ù.
+	SetGenericTeamId(FGenericTeamId(TeamPlayer));
 
-	//Ä³¸¯ÅÍ¹«ºê¸ÕÆ® ÄÄÆ÷³ÍÆ®¸¦ ¾ò¾î¿Â´Ù
-	//GetCharacterMovement ´Â 
-	// UCharacterMovementComponent* ¸¦ ¹İÈ¯ÇÑ´Ù
-	
-	//JumpZVelocity Á¡ÇÁ ³ôÀÌ¸¦ ¼³Á¤ÇÑ´Ù
-	GetCharacterMovement()
-		->JumpZVelocity = 600.f;	
-	//GravityScale  Áß·ÂÀ» ¼³Á¤ÇÑ´Ù
-	GetCharacterMovement()
-		->GravityScale = 1.0f; 
-	//AirControl  °øÁß ÀÌµ¿ Á¦¾î¸¦ ¼³Á¤ÇÑ´Ù, 
-	// ³·À» ¼ö·Ï ÀÌµ¿ÀÌ Á¦ÇÑµÇ°í, ³ôÀ»¼ö·Ï °øÁß ÀÌµ¿¿¡ ÀÚÀ¯·Î¿öÁø´Ù 
-	GetCharacterMovement()
-		->AirControl = 0.5f;
+	bNormalAttackOverlap = false;
 
-	//JumpMaxCount ´Â  ÂøÁöÇÏ±â Àü±îÁö ÃÖ´ë °¡´ÉÇÑ Á¡ÇÁ È½¼ö¸¦ °áÁ¤ÇÑ´Ù
-	JumpMaxCount = 2;
+	GetCapsuleComponent()->SetCollisionProfileName(TEXT("Player"));
 
-	/*
-		¾Ö´Ï¸ŞÀÌ¼Ç ºí·çÇÁ¸°Æ® ¿¡¼Â ·Îµå
-		¾Ö´ÔÀÎ½ºÅÏ½º¸¦ »ó¼Ó¹Ş°í ÀÖ´Â TSubClassOf<UAnimInstance> Å¸ÀÔÀÇ Å¬·¡½ºÀÌ´Ù
-		FClassFinder ¸¦ »ç¿ëÇØ¾ß ÇÏ¸ç, 
-		ºí·çÇÁ¸°Æ®ÀÌ±â ¶§¹®¿¡ °æ·Î ¸¶Áö¸·¿¡ _C'  ¸¦ ºÙ¿©¾ß ÇÑ´Ù 	*/
-	static ConstructorHelpers::FClassFinder<UAnimInstance> 
-		ABPCharacter(
-			TEXT(
-				"/Script/Engine.AnimBlueprint'/Game/Player/Animation/ABP/ABPCharacter.ABPCharacter_C'")
-		);
-
-	//¿¡¼Â ·Îµå¿¡ ¼º°øÇÏ¸é  ÇöÀç ½ºÄÌ·¹Å» ¸Ş½¬ÀÇ  ¾Ö´ÔÀÎ½ºÅÏ½º Å¬·¡½º·Î ¼³Á¤ÇÑ´Ù
-	if (ABPCharacter.Succeeded())
-		GetMesh()->SetAnimInstanceClass(ABPCharacter.Class);
-
-	//Åõ»çÃ¼ ¿¡¼Â·Îµå
-	static ConstructorHelpers::FClassFinder<AATestProjectile> TestProjectile(
-		TEXT(
-			"/Script/CoreUObject.Class'/Script/PracticeGame.ATestProjectile'")
-	);
-	//¿¡¼Â ÁÖ¼Ò ÇÒ´ç
-	if (TestProjectile.Succeeded())
-		mProjectileClass = TestProjectile.Class;
+	//ìŠ¤í…ì‹¤ ì„¤ì •
+	GetMesh()->SetRenderCustomDepth(true);
+	//GetMesh()->SetCustomDepthStencilValue(1);
 }
 
 // Called when the game starts or when spawned
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	//ºùÀÇµÈ ÇÃ·¹ÀÌ¾î ÄÁÆ®·Ñ·¯¸¦ ¾ò¾î¿Â´Ù
-	//GetController ´Â AController Å¸ÀÔÀ» ¹İÈ¯ÇÏ±â ¶§¹®¿¡ Ä³½ºÆÃÀÌ ÇÊ¿äÇÏ´Ù
-	//UObject ¸¦ »ó¼Ó¹Ş°í ÀÖ¾î Cast ¸¦ ½á¼­ ¾ÈÀüÇÏ°Ô Çüº¯È¯À» ÇÒ ¼ö ÀÖ´Ù
+
+	//ë°ì´í„° í…Œì´ë¸”ë¡œ ë¶€í„° ë°ì´í„° ê°€ì ¸ì˜¤ê¸° ê°ê°ì˜ í´ë˜ìŠ¤ë³„ë¡œ ìƒì„±ìì—ì„œ mDataKey ë¥¼ ì •ì˜í•˜ê³  ìˆê¸° ë–„ë¬¸ì— ì•Œë§ê²Œ ì„¸íŒ…ì´ ë ê²ƒì´ë‹¤
+	const UPlayerData* PlayerData =
+		GetDefault<UPlayerData>();
+
+	if (PlayerData)
+	{
+		FPlayerTableInfo* TableInfo =
+			PlayerData->FindPlayerInfo(mDataKey);
+
+		if (TableInfo)
+		{
+			mJob = TableInfo->Job;
+			mName = TableInfo->Name;
+			mAttack = TableInfo->Attack;
+			mDefense = TableInfo->Defense;
+			mHP = TableInfo->HP;
+			mHPMax = TableInfo->HP;
+			mMP = TableInfo->MP;
+			mMPMax = TableInfo->MP;
+			mAttackDistance = TableInfo->AttackDistance;
+			mMoveSpeed = TableInfo->MoveSpeed;
+			mLevel = TableInfo->Level;
+			mExp = TableInfo->Exp;
+			mGold = TableInfo->Gold;
+
+			GetCharacterMovement()->MaxWalkSpeed = mMoveSpeed;
+
+			//mMovement->SetMaxSpeed(mMoveSpeed);
+
+			UE_LOG(TestGame, Warning, TEXT("Player Info"));
+			//MainWidget ì´ ë·°í¬íŠ¸ì— ë¿Œë ¤ì§„ ë‹¤ìŒ (ì»¨íŠ¸ë¡¤ëŸ¬ì˜ BeginPlay) ì´ë¯€ë¡œ  ê°’ì„ ì—¬ê¸°ì„œ ì „ë‹¬í•´ë„ ì¢‹ë‹¤
+			UPlayerStatusHUDWidget* HUDWidget = CWidgetManager::GetInst()->FindWidget<UPlayerStatusHUDWidget>(TEXT("PlayerStatusHUDWidget"));
+			if (HUDWidget)
+			{
+				HUDWidget->SetPlayerName(mName);
+				HUDWidget->SetHPBar(mHP, mHPMax);  
+				HUDWidget->SetMPBar(mMP, mMPMax);
+			}
+		}
+
+		FLevelExpRow* ExpInfo = PlayerData->FindExpInfo(FName(*FString::FromInt(mLevel+1)));
+
+		if (ExpInfo)
+		{
+			//MainWidget ì´ ë·°í¬íŠ¸ì— ë¿Œë ¤ì§„ ë‹¤ìŒ (ì»¨íŠ¸ë¡¤ëŸ¬ì˜ BeginPlay) ì´ë¯€ë¡œ  ê°’ì„ ì—¬ê¸°ì„œ ì „ë‹¬í•´ë„ ì¢‹ë‹¤
+			UPlayerStatusHUDWidget* HUDWidget = CWidgetManager::GetInst()->FindWidget<UPlayerStatusHUDWidget>(TEXT("PlayerStatusHUDWidget"));
+			if (HUDWidget)
+			{
+				//ì•„ì§ ì €ì¥ê¸°ëŠ¥ì´ ì—†ìœ¼ë¯€ë¡œ í˜„ì¬ Exp ëŠ” ì¼€ë¦­í„° ì´ˆê¸°ê°’ìœ¼ë¡œ ê³„ì‚°í•œë‹¤
+				int32 ExpToNextLevel = ExpInfo->RequiredExp;
+				HUDWidget->SetXPBar(mExp, ExpToNextLevel);
+			}
+		}
+	}
+
+	//ë¹™ì˜ëœ í”Œë ˆì´ì–´ ì»¨íŠ¸ë¡¤ëŸ¬ë¥¼ ì–»ì–´ì˜¨ë‹¤
+	//GetController ëŠ” AController íƒ€ì…ì„ ë°˜í™˜í•˜ê¸° ë•Œë¬¸ì— ìºìŠ¤íŒ…ì´ í•„ìš”í•˜ë‹¤
+	//UObject ë¥¼ ìƒì†ë°›ê³  ìˆì–´ Cast ë¥¼ ì¨ì„œ ì•ˆì „í•˜ê²Œ í˜•ë³€í™˜ì„ í•  ìˆ˜ ìˆë‹¤
 
 	APlayerController* PlayerController = 
 		Cast<APlayerController>(GetController());
 
-	//Ä³½ºÆÃ¿¡¼º°øÇÏ¸é
+	//ìºìŠ¤íŒ…ì—ì„±ê³µí•˜ë©´
 	if (IsValid(PlayerController))
 	{
-		//ÇöÀç ÇÃ·¹ÀÌ¾îÀÇ ·ÎÄÃ ¼­ºê½Ã½ºÅÛÀ» °¡Á®¿Â´Ù 
-		//Áï, ÇöÀç ÇÃ·¹ÀÌ¾î°¡ »ç¿ëÇÏ°í ÀÖ´Â Çâ»óµÈ ÀÔ·Â Ã³¸® ¼­ºê½Ã½ºÅÛÀ» °¡Á®¿Â´Ù
+		//í˜„ì¬ í”Œë ˆì´ì–´ì˜ ë¡œì»¬ ì„œë¸Œì‹œìŠ¤í…œì„ ê°€ì ¸ì˜¨ë‹¤ 
+		//ì¦‰, í˜„ì¬ í”Œë ˆì´ì–´ê°€ ì‚¬ìš©í•˜ê³  ìˆëŠ” í–¥ìƒëœ ì…ë ¥ ì²˜ë¦¬ ì„œë¸Œì‹œìŠ¤í…œì„ ê°€ì ¸ì˜¨ë‹¤
 		UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::
 			GetSubsystem<UEnhancedInputLocalPlayerSubsystem>
 			(PlayerController->GetLocalPlayer());
 
-		//CDO ¿¡¼­ APlayerControllerTestGame À» °¡Á®¿Â´Ù
+		//CDO ì—ì„œ APlayerControllerTestGame ì„ ê°€ì ¸ì˜¨ë‹¤
 		const APlayerControllerTestGame* APCTestGameCDO = GetDefault<APlayerControllerTestGame>();
 
-		//¸ÅÇÎ ÄÁÅØ½ºÆ®¸¦ ÇöÀç ÇÃ·¹ÀÌ¾îÀÇ ¼­ºê½Ã½ºÅÛ¿¡ Ãß°¡ÇÑ´Ù
+		//ë§¤í•‘ ì»¨í…ìŠ¤íŠ¸ë¥¼ í˜„ì¬ í”Œë ˆì´ì–´ì˜ ì„œë¸Œì‹œìŠ¤í…œì— ì¶”ê°€í•œë‹¤
 		Subsystem->AddMappingContext(APCTestGameCDO->mIMC, 0);
 	}
 
-	//¾Ö´ÔÀÎ½ºÅÏ½º¸¦ ¹Ş¾Æ¿Â´Ù
-	mAnimInst = Cast<UAnimInstancePlayer>(GetMesh()->GetAnimInstance());
+	//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ë¥¼ ë°›ì•„ì˜¨ë‹¤
+	mAnimInst = Cast<UPlayerTemplateAnimInstance>(GetMesh()->GetAnimInstance());
+
+
+	//ì˜¤ë²„ë ™,í› ì´ë²¤íŠ¸ ë¸ë¦¬ê²Œì´íŒ…
+		//ì›¨í° ì½œë¦¬ì „ ë°•ìŠ¤ê°€ ìˆëŠ” ê²½ìš° ëª¨ë‘ì— ë¸ë¦¬ê²Œì´íŠ¸í•œë‹¤
+	if (mWeaponColBox.Num() > 0)
+	{
+		int32 Count = mWeaponColBox.Num();
+		for (int32 i = 0; i < Count; i++)
+		{
+			//Overlap
+			UE_LOG(TestGame, Warning, TEXT("Overlap delegate bound : mWweaponColBox[%d]"), i);
+			mWeaponColBox[i]->OnComponentBeginOverlap.AddDynamic(
+				this, &APlayerCharacter::OnWeaponOverlap);
+
+			//Onhit
+			//UE_LOG(TestGame, Warning, TEXT("OnHit delegate bound : mWweaponColBox[%d]"), i);
+			//mWeaponColBox[i]->OnComponentHit.AddDynamic(
+			//	this, &APlayerCharacter::OnWeaponHit);
+		}
+	}
 }
 
-/*BindAction À¸·Î ¹ÙÀÎµù µÇ¾î ÀÖÀ¸¸ç,
-ÀÔ·Â¾×¼Ç 'IAMove' °¡ Triggered µÉ ¶§ È£ÃâµÇ´Â ÇÔ¼öÀÌ´Ù.*/
+void APlayerCharacter::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	//const UPlayerData* PlayerData =
+	//	GetDefault<UPlayerData>();
+
+	//if (PlayerData)
+	//{
+	//	FPlayerTableInfo* TableInfo =
+	//		PlayerData->FindPlayerInfo(mDataKey);
+
+	//	if (TableInfo)
+	//	{
+	//		mJob = TableInfo->Job;
+	//		mName = TableInfo->Name;
+	//		mAttack = TableInfo->Attack;
+	//		mDefense = TableInfo->Defense;
+	//		mHP = TableInfo->HP;
+	//		mHPMax = TableInfo->HP;
+	//		mMP = TableInfo->MP;
+	//		mMPMax = TableInfo->MP;
+	//		mAttackDistance = TableInfo->AttackDistance;
+	//		mMoveSpeed = TableInfo->MoveSpeed;
+	//		mLevel = TableInfo->Level;
+	//		mExp = TableInfo->Exp;
+	//		mGold = TableInfo->Gold;
+
+	//		GetCharacterMovement()->MaxWalkSpeed = mMoveSpeed;
+
+	//		//mMovement->SetMaxSpeed(mMoveSpeed);
+
+	//		UE_LOG(TestGame, Warning, TEXT("Player Info"));
+	//	}
+	//}
+}
+
+/*BindAction ìœ¼ë¡œ ë°”ì¸ë”© ë˜ì–´ ìˆìœ¼ë©°,
+ì…ë ¥ì•¡ì…˜ 'IAMove' ê°€ Triggered ë  ë•Œ í˜¸ì¶œë˜ëŠ” í•¨ìˆ˜ì´ë‹¤.*/
 void APlayerCharacter::OnIAMoveTriggered(const FInputActionValue& Value)
 {
-	//ÀÌµ¿ °¡´ÉÇÒ ¶§¸¸ ½ÇÇà
-	if (!IsCharacterImmobilized())
-	{
-		/*
-		ÀÎÀÚ·Î ¹Ş¾Æ¿À´Â °ªÀº ÀÔ·Â ¾×¼Ç ¼³Á¤°ú ¸ÅÇÎ ÄÁÅØ½ºÆ®¿¡¼­ Á¤ÀÇÇÑ ³»¿ëÀ» µû¸¥´Ù
-			Á¤ÀÇ
-				IA_Move ´Â 2D Çü½ÄÀ¸·Î Á¤ÀÇÇÏ°í ÀÖ´Ù
-				¸ÅÇÎÄÁÅØ½ºÆ®¿¡¼­´Â
-					Å°º¸µå ÀÔ·ÂÀ» X Ãà°ú Y Ãà(½ºÀ§Áñ µÈ °æ¿ì) À¸·Î ¸ÅÇÎÇÏ¿´´Ù
-				Triggered ¶ó¸é 1 (ºÎÁ¤ ÀÎ °æ¿ì -1)
-							 ¾Æ´Ï¸é 0 ÀÌ´Ù*/
-
-							 //ÀÔ·Â°ªÀ» º¤ÅÍ·Î º¯È¯ÇÑ °ªÀ» ÀúÀåÇÒ º¯¼ö¸¦ ¼±¾ğÇÑ´Ù
-							 //º¤ÅÍ °è»êÀ» À§ÇØ ¾²ÀÏ °ÍÀÌ´Ù.
-		FVector Axis;
-
-		//ÀÔ·Â¿¡¼­ Àü´ŞµÈ °ªÀ» º¤ÅÍ·Î Çüº¯ÇÑ´Ù.
-		//Value °ªÀÇ ¿¹¿Ü Ã³¸®¸¦ À§ÇØ switch ¹®ÀÇ ÇüÅÂ·Î ±¸ÇöÇß´Ù
-		switch (Value.GetValueType())
+	//ì´ë™ ë°©ì‹ 2. (ë©”ì‹œ ì¤‘ì‹¬ : í˜„ì¬ ë©”ì‹œê°€ ë³´ëŠ” ë°©í–¥ì´ ì•(W)  wasd ë˜ëŠ” ì™¼ìª½ìŠ¤í‹±ì˜ ë°©í–¥ì„ íŒë³„í•œë‹¤)
+	//ì´ë™ ê°€ëŠ¥í•  ë•Œë§Œ ì‹¤í–‰
+		if (!IsCharacterImmobilized())
 		{
-		case EInputActionValueType::Axis1D:
-			Axis.X = FMath::Clamp(Value.Get<float>(), -1.0f, 1.0f);
-			if (bDebugEnabled)
-				UE_LOG(PlayerLog, Display,
-					TEXT("InputActionType [Axis1D],\t %.1f"),
-					Axis.X);
-			break;
-		case EInputActionValueType::Axis2D:
-		{
-			FVector2D Axis2D = Value.Get<FVector2D>();
-			Axis.X = FMath::Clamp(Axis2D.X, -1.0f, 1.0f);
-			Axis.Y = FMath::Clamp(Axis2D.Y, -1.0f, 1.0f);
-			if (bDebugEnabled)
-				UE_LOG(PlayerLog, Display,
-					TEXT("InputActionType [Axis2D],\t( %.1f, %.1f )"),
-					Axis.X, Axis.Y);
-			break;
-		}
-		case EInputActionValueType::Axis3D:
-			Axis = Value.Get<FVector>();
-			if (bDebugEnabled)
-				UE_LOG(PlayerLog, Display,
-					TEXT(" InputActionType [Axis3D],\t( %.1f, %.1f, %.1f )"),
-					Axis.X, Axis.Y, Axis.Z);
-			break;
-		default:
-			if (bDebugEnabled)
-				UE_LOG(LogTemp, Warning,
-					TEXT("Unexpected InputActionValueType received: %d"),
-					static_cast<int32>(Value.GetValueType()));
-			return;
-		}
+			FVector Axis;
+			switch (Value.GetValueType())
+			{
+			case EInputActionValueType::Axis2D:
+			{
+				FVector2D Axis2D = Value.Get<FVector2D>();
+				Axis.X = FMath::Clamp(Axis2D.X, -1.0f, 1.0f);
+				Axis.Y = FMath::Clamp(Axis2D.Y, -1.0f, 1.0f);
+				break;
+			}
+			default:
+				return;
+			}
 
-		// ¹æÇâÀ» °è»êÇÏ±âÀ§ÇÑ FVector °´Ã¼ÀÌ´Ù. 0À¸·Î ÃÊ±âÈ­ÇÑ´Ù
-		FVector Direction = FVector::Zero();
+			FVector MeshForward = GetMesh()->GetForwardVector();
+			MeshForward.Z = 0;
+			MeshForward.Normalize();
 
-		//X ÃàÀÇ °ªÀ» ¹Ş¾Æ ÇöÀç¿¢ÅÍÀÇ Àü¹æº¤ÅÍ (XÃà) ¿¡ °öÇÑ´Ù
-		//Y ÃàÀÇ °ªÀ» ¹Ş¾Æ ÇöÀç ¿¢ÅÍÀÇ ¿ìÃøº¤ÅÍ (YÃà) ¿¡ °öÇÏ¿© ¸ğµç °ªÀ» ÀúÀåÇÑ´Ù
-		Direction = GetActorForwardVector() * Axis.X;
-		Direction += GetActorRightVector() * Axis.Y;
+			FRotator AdjustedRotation = MeshForward.Rotation();
+			AdjustedRotation.Yaw -= 90.0f;
 
-		/* ¶Ç´Â
-		 Direction = FVector(GetActorForwardVector() * Axis.X,
-										GetActorRightVector() * Axis.Y,
-										GetActorUpVector());							*/
+			FVector AdjustedForward = AdjustedRotation.Vector();
 
-										//Á¤±ÔÈ­¸¦ ÇÏ¿© ´ë°¢¼±ÀÇ ÀÔ·ÂÀ» ¸Å²ô·´°Ô Ã³¸®ÇÑ´Ù.
-										//¿¹¿Ü Ã³¸® 0 Á¤±ÔÈ­¸¦ ¹æÁöÇÑ´Ù
-		if (!Direction.IsNearlyZero())
-		{
-			//¿¹¿Ü Ã³¸® ºÎµ¿¼Ò¼öÁ¡ ¿¬»ê¿À·ù(¾ÆÁÖ ÀÛÀº °ª µî) ¸¦ ¹æÁöÇÑ´Ù
-			const float Threshold = KINDA_SMALL_NUMBER;
-			if (Direction.SizeSquared() > Threshold)
+			FVector Direction = AdjustedForward * -Axis.X;
+			Direction += FVector::CrossProduct(AdjustedForward, FVector::UpVector) * Axis.Y;
+
+			if (!Direction.IsNearlyZero())
 			{
 				Direction.Normalize();
-				//¿¹¿Ü Ã³¸® Á¤±ÔÈ­ ÈÄ Å©±â º¸Á¤
-				Direction *= 1.0f / FMath::Max(Direction.Size(), 1.0f);
-				if (bDebugEnabled)
-					UE_LOG(PlayerLog, Display, TEXT("Direction Normalized Safety : ( %.1f, %.1f, %.1f )"), Direction.X, Direction.Y, Direction.Z);
 			}
+			//ë“¤ê³  ìˆëŠ” ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ê°€ ìˆë‹¤ë©´ 
+			//Axis ë¥¼
+			//		: ì…ë ¥ìœ¼ë¡œ ë°›ì€ X ë° Y ì¶• ì„  FVector ë¡œ ë³€í™˜ í•œ ê°’
+			//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ì˜ mDirection ë©¤ë²„ì— í• ë‹¹í•œë‹¤
+			if (mAnimInst)
+				mAnimInst->SetDirection(Axis);
+
+			MoveToAxis(Direction, 
+				FMath::Max(FMath::Abs(Axis.X), 
+					FMath::Abs(Axis.Y)));
+		}
+		else
+		{
+			if (bDebugEnabled)
+				UE_LOG(PlayerLog, Display, TEXT("Cannot Move Character : Immobillized"));
 		}
 
-		//ÇöÀç ÇÃ·¹ÀÌ¾î ¸Ş½¬ÀÇ ¾Ö´ÔÀÎ½ºÅÏ½º¸¦ ¹Ş¾Æ 
-		// UAnimInstancePlayer ·Î Ä³½ºÆÃÇÑ´Ù
-		UAnimInstancePlayer* AnimInst =
-			Cast<UAnimInstancePlayer>(GetMesh()->GetAnimInstance());
+		//ì´ë™ë°©ì‹ 1. ì¹´ë©”ë¼ì»´í¬ë„ŒíŠ¸ê°€ ë³´ëŠ” ë°©í–¥ ê¸°ì¤€ (ë³´ëŠ”ë°©í–¥ì´ ì•[W])
+		////ì´ë™ ê°€ëŠ¥í•  ë•Œë§Œ ì‹¤í–‰
+		//if (!IsCharacterImmobilized())
+		//{
+		////	/*
+		//	ì¹´ë©”ë¼ê°€ ë³´ëŠ” ë°©í–¥ì„ ì¤‘ì‹¬ìœ¼ë¡œ ë™ì ìœ¼ë¡œ ì…ë ¥ ë°©í–¥ì´ ë°”ë€Œê²Œë” ì´ë™í•˜ê²Œ í•œë‹¤ , ì´ì „ ë°©ì‹ (ì›”ë“œ ê¸°ì¤€ ë°©ì‹)ì€ ì•„ë˜ ì£¼ì„ì²˜ë¦¬í–ˆë‹¤
+		//	*/
+		//	FVector Axis;
+		//	switch (Value.GetValueType())
+		//	{
+		//	case EInputActionValueType::Axis2D:
+		//	{
+		//		FVector2D Axis2D = Value.Get<FVector2D>();
+		//		Axis.X = FMath::Clamp(Axis2D.X, -1.0f, 1.0f);
+		//		Axis.Y = FMath::Clamp(Axis2D.Y, -1.0f, 1.0f);
+		//		break;
+		//	}
+		//	default:
+		//		return;
+		//	}
 
-		//Ä³½ºÆÃ¿¡ ¼º°øÇÏ¸é 
-		//Axis ¸¦
-		//		: ÀÔ·ÂÀ¸·Î ¹ŞÀº X ¹× Y Ãà À»  FVector ·Î º¯È¯ ÇÑ °ª
-		//¾Ö´ÔÀÎ½ºÅÏ½ºÀÇ mDirection ¸â¹ö¿¡ ÇÒ´çÇÑ´Ù
-		if (IsValid(AnimInst))
-			AnimInst->SetDirection(Axis);
+		//	FVector CameraDirection = mCamera->GetForwardVector();
+		//	CameraDirection.Z = 0;
+		//	CameraDirection.Normalize();
 
-		//°è»ê ¿Ï·áµÈ º¤ÅÍ·Î ¾Æ·¡ÀÇ ÇÔ¼ö¸¦ È£ÃâÇÑ´Ù
-		//MoveToAxis ´Â ÀÌµ¿À» Ã³¸®ÇÏ¸ç ÀÌµ¿°ú °ü·ÃµÈ Ãß°¡ ±â´ÉÀ» ±¸ÇöÇÒ ¼ö ÀÖµµ·Ï 
-		//»ç¿ëÀÚ Á¤ÀÇ·Î ÀÛ¼ºÇÑ ¸â¹ö ÇÔ¼öÀÌ´Ù
-		float ScaleValue = FMath::Max(
-			FMath::Abs(Axis.X),
-			FMath::Abs(Axis.Y)
-		);
+		//	FVector Direction = CameraDirection * Axis.X;
+		//	Direction += FVector::CrossProduct(CameraDirection, FVector::UpVector) * Axis.Y;
 
-		MoveToAxis(Direction, ScaleValue);
-	}
-	else
-	{
-		if (bDebugEnabled)
-			UE_LOG(PlayerLog, Display, TEXT("Cannot Move Character : Immobillized"));
-	}
+		//	if (!Direction.IsNearlyZero())
+		//	{
+		//		Direction.Normalize();
+		//	}
+
+		//	MoveToAxis(Direction, FMath::Max(FMath::Abs(Axis.X), FMath::Abs(Axis.Y)));
+
+		//	//ë“¤ê³  ìˆëŠ” ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ê°€ ìˆë‹¤ë©´ 
+		//	//Axis ë¥¼
+		//	//		: ì…ë ¥ìœ¼ë¡œ ë°›ì€ X ë° Y ì¶• ì„  FVector ë¡œ ë³€í™˜ í•œ ê°’
+		//	//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ì˜ mDirection ë©¤ë²„ì— í• ë‹¹í•œë‹¤
+		//	if (mAnimInst)
+		//		mAnimInst->SetDirection(Axis);
+		//}
+		//else
+		//{
+		//	if (bDebugEnabled)
+		//		UE_LOG(PlayerLog, Display, TEXT("Cannot Move Character : Immobillized"));
+		//}
+
+
+
+	////êµ¬ ì´ë™ ë°©ì‹ (ì›”ë“œ ì¤‘ì‹¬, ì¼€ë¦­í„°ì˜ ì´ˆê¸° ë°©í–¥ì„ ê¸°ì¤€ìœ¼ë¡œí•¨ (ì›”ë“œ ì •ë°˜ëŒ€ë°©í–¥ì´ ì•)
+	////ì´ë™ ê°€ëŠ¥í•  ë•Œë§Œ ì‹¤í–‰
+	//if (!IsCharacterImmobilized())
+	//{
+	//	/*
+	//	ì¸ìë¡œ ë°›ì•„ì˜¤ëŠ” ê°’ì€ ì…ë ¥ ì•¡ì…˜ ì„¤ì •ê³¼ ë§¤í•‘ ì»¨í…ìŠ¤íŠ¸ì—ì„œ ì •ì˜í•œ ë‚´ìš©ì„ ë”°ë¥¸ë‹¤
+	//		ì •ì˜
+	//			IA_Move ëŠ” 2D í˜•ì‹ìœ¼ë¡œ ì •ì˜í•˜ê³  ìˆë‹¤
+	//			ë§¤í•‘ì»¨í…ìŠ¤íŠ¸ì—ì„œëŠ”
+	//				í‚¤ë³´ë“œ ì…ë ¥ì„ X ì¶•ê³¼ Y ì¶•(ìŠ¤ìœ„ì¦ ëœ ê²½ìš°) ìœ¼ë¡œ ë§¤í•‘í•˜ì˜€ë‹¤
+	//			Triggered ë¼ë©´ 1 (ë¶€ì • ì¸ ê²½ìš° -1)
+	//						 ì•„ë‹ˆë©´ 0 ì´ë‹¤*/
+
+	//						 //ì…ë ¥ê°’ì„ ë²¡í„°ë¡œ ë³€í™˜í•œ ê°’ì„ ì €ì¥í•  ë³€ìˆ˜ë¥¼ ì„ ì–¸í•œë‹¤
+	//						 //ë²¡í„° ê³„ì‚°ì„ ìœ„í•´ ì“°ì¼ ê²ƒì´ë‹¤.
+	//	FVector Axis;
+
+	//	//ì…ë ¥ì—ì„œ ì „ë‹¬ëœ ê°’ì„ ë²¡í„°ë¡œ í˜•ë³€í•œë‹¤.
+	//	//Value ê°’ì˜ ì˜ˆì™¸ ì²˜ë¦¬ë¥¼ ìœ„í•´ switch ë¬¸ì˜ í˜•íƒœë¡œ êµ¬í˜„í–ˆë‹¤
+	//	switch (Value.GetValueType())
+	//	{
+	//	case EInputActionValueType::Axis1D:
+	//		Axis.X = FMath::Clamp(Value.Get<float>(), -1.0f, 1.0f);
+	//		if (bDebugEnabled)
+	//			UE_LOG(PlayerLog, Display,
+	//				TEXT("InputActionType [Axis1D],\t %.1f"),
+	//				Axis.X);
+	//		break;
+	//	case EInputActionValueType::Axis2D:
+	//	{
+	//		FVector2D Axis2D = Value.Get<FVector2D>();
+	//		Axis.X = FMath::Clamp(Axis2D.X, -1.0f, 1.0f);
+	//		Axis.Y = FMath::Clamp(Axis2D.Y, -1.0f, 1.0f);
+	//		if (bDebugEnabled)
+	//			UE_LOG(PlayerLog, Display,
+	//				TEXT("InputActionType [Axis2D],\t( %.1f, %.1f )"),
+	//				Axis.X, Axis.Y);
+	//		break;
+	//	}
+	//	case EInputActionValueType::Axis3D:
+	//		Axis = Value.Get<FVector>();
+	//		if (bDebugEnabled)
+	//			UE_LOG(PlayerLog, Display,
+	//				TEXT(" InputActionType [Axis3D],\t( %.1f, %.1f, %.1f )"),
+	//				Axis.X, Axis.Y, Axis.Z);
+	//		break;
+	//	default:
+	//		if (bDebugEnabled)
+	//			UE_LOG(LogTemp, Warning,
+	//				TEXT("Unexpected InputActionValueType received: %d"),
+	//				static_cast<int32>(Value.GetValueType()));
+	//		return;
+	//	}
+
+	//	// ë°©í–¥ì„ ê³„ì‚°í•˜ê¸°ìœ„í•œ FVector ê°ì²´ì´ë‹¤. 0ìœ¼ë¡œ ì´ˆê¸°í™”í•œë‹¤
+	//	FVector Direction = FVector::Zero();
+	//	
+	//	//X ì¶•ì˜ ê°’ì„ ë°›ì•„ í˜„ì¬ì—‘í„°ì˜ ì „ë°©ë²¡í„° (Xì¶•) ì— ê³±í•œë‹¤
+	//	//Y ì¶•ì˜ ê°’ì„ ë°›ì•„ í˜„ì¬ ì—‘í„°ì˜ ìš°ì¸¡ë²¡í„° (Yì¶•) ì— ê³±í•˜ì—¬ ëª¨ë“  ê°’ì„ ì €ì¥í•œë‹¤
+	//	Direction = GetActorForwardVector() * Axis.X;
+	//	Direction += GetActorRightVector() * Axis.Y;
+
+	//	/* ë˜ëŠ”
+	//	 Direction = FVector(GetActorForwardVector() * Axis.X,
+	//									GetActorRightVector() * Axis.Y,
+	//									GetActorUpVector());							*/
+
+	//									//ì •ê·œí™”ë¥¼ í•˜ì—¬ ëŒ€ê°ì„ ì˜ ì…ë ¥ì„ ë§¤ë„ëŸ½ê²Œ ì²˜ë¦¬í•œë‹¤.
+	//									//ì˜ˆì™¸ ì²˜ë¦¬ 0 ì •ê·œí™”ë¥¼ ë°©ì§€í•œë‹¤
+	//	if (!Direction.IsNearlyZero())
+	//	{
+	//		//ì˜ˆì™¸ ì²˜ë¦¬ ë¶€ë™ì†Œìˆ˜ì  ì—°ì‚°ì˜¤ë¥˜(ì•„ì£¼ ì‘ì€ ê°’ ë“±) ë¥¼ ë°©ì§€í•œë‹¤
+	//		const float Threshold = KINDA_SMALL_NUMBER;
+	//		if (Direction.SizeSquared() > Threshold)
+	//		{
+	//			Direction.Normalize();
+	//			//ì˜ˆì™¸ ì²˜ë¦¬ ì •ê·œí™” í›„ í¬ê¸° ë³´ì •
+	//			Direction *= 1.0f / FMath::Max(Direction.Size(), 1.0f);
+	//			if (bDebugEnabled)
+	//				UE_LOG(PlayerLog, Display, TEXT("Direction Normalized Safety : ( %.1f, %.1f, %.1f )"), Direction.X, Direction.Y, Direction.Z);
+	//		}
+	//	}
+
+
+	//	//mAnimInst ë¥¼ BeginPlay ì—ì„œ ë°›ì•„ì˜¤ë¯€ë¡œ ê°ì²´ë¥¼ ìƒì„±í•  í•„ìš”ê°€ ì—†ë‹¤.
+	//		////í˜„ì¬ í”Œë ˆì´ì–´ ë©”ì‰¬ì˜ ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ë¥¼ ë°›ì•„ 
+	//		//// UAnimInstancePlayer ë¡œ ìºìŠ¤íŒ…í•œë‹¤
+	//		//UAnimInstancePlayer* AnimInst =
+	//		//	Cast<UAnimInstancePlayer>(GetMesh()->GetAnimInstance());
+	//
+	//	//ë“¤ê³  ìˆëŠ” ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ê°€ ìˆë‹¤ë©´ 
+	//	//Axis ë¥¼
+	//	//		: ì…ë ¥ìœ¼ë¡œ ë°›ì€ X ë° Y ì¶• ì„  FVector ë¡œ ë³€í™˜ í•œ ê°’
+	//	//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ì˜ mDirection ë©¤ë²„ì— í• ë‹¹í•œë‹¤
+	//	if (mAnimInst)
+	//		mAnimInst->SetDirection(Axis);
+
+	//	//ê³„ì‚° ì™„ë£Œëœ ë²¡í„°ë¡œ ì•„ë˜ì˜ í•¨ìˆ˜ë¥¼ í˜¸ì¶œí•œë‹¤
+	//	//MoveToAxis ëŠ” ì´ë™ì„ ì²˜ë¦¬í•˜ë©° ì´ë™ê³¼ ê´€ë ¨ëœ ì¶”ê°€ ê¸°ëŠ¥ì„ êµ¬í˜„í•  ìˆ˜ ìˆë„ë¡ 
+	//	//ì‚¬ìš©ì ì •ì˜ë¡œ ì‘ì„±í•œ ë©¤ë²„ í•¨ìˆ˜ì´ë‹¤
+	//	float ScaleValue = FMath::Max(
+	//		FMath::Abs(Axis.X),
+	//		FMath::Abs(Axis.Y)
+	//	);
+
+	//	MoveToAxis(Direction, ScaleValue);
+	//}
+	//else
+	//{
+	//	if (bDebugEnabled)
+	//		UE_LOG(PlayerLog, Display, TEXT("Cannot Move Character : Immobillized"));
+	//}
 }
 
-//ÀÌ ÇÔ¼ö´Â Á¡ÇÁ ÇÔ¼ö·Î 
-// IA_Jump ·Î ¸ÅÇÎÇÑ Å°°¡ Started µÇ¾úÀ»¶§ È£ÃâµÈ´Ù.
+//ì´ í•¨ìˆ˜ëŠ” ì í”„ í•¨ìˆ˜ë¡œ 
+// IA_Jump ë¡œ ë§¤í•‘í•œ í‚¤ê°€ Started ë˜ì—ˆì„ë•Œ í˜¸ì¶œëœë‹¤.
 void APlayerCharacter::OnIAJumpStarted(const FInputActionValue& Value)
 {
-	//CanJump ´Â Á¡ÇÁ°¡ °¡´ÉÇÑ »óÅÂÀÎÁö¸¦ ¹İÈ¯ÇÑ´Ù
-	//Á¡ÇÁ°¡ °¡´ÉÇÏ°í ÀÌµ¿ºÒ°¡°¡ ¾Æ´Ò ¶§¸¸ ½ÇÇàÇÑ´Ù
+	//CanJump ëŠ” ì í”„ê°€ ê°€ëŠ¥í•œ ìƒíƒœì¸ì§€ë¥¼ ë°˜í™˜í•œë‹¤
+	//ì í”„ê°€ ê°€ëŠ¥í•˜ê³  ì´ë™ë¶ˆê°€ê°€ ì•„ë‹ ë•Œë§Œ ì‹¤í–‰í•œë‹¤
 	if (CanJump() && !IsCharacterImmobilized())
 	{
-		GetCharacterMovement()->bNotifyApex = true; // ÃÖ°íÁ¡ ¾Ë¸² È°¼ºÈ­
+		GetCharacterMovement()->bNotifyApex = true; // ìµœê³ ì  ì•Œë¦¼ í™œì„±í™”
 		//mCharacterState.ClearState(mCharacterState.ACTING);
-		//Jump ´Â Ä³¸¯ÅÍ°¡ Á¡ÇÁ ÇÏµµ·Ï ÇÏ´Â ¸â¹ö ÇÔ¼öÀÌ´Ù.
+		//Jump ëŠ” ìºë¦­í„°ê°€ ì í”„ í•˜ë„ë¡ í•˜ëŠ” ë©¤ë²„ í•¨ìˆ˜ì´ë‹¤.
 		Jump();
 
 		if (bDebugEnabled)
@@ -296,97 +461,52 @@ void APlayerCharacter::OnIAJumpStarted(const FInputActionValue& Value)
 	}
 }
 
+//ì´ì œ ì¼ë°˜ ê³µê²©ë„ 1234567 ì¤‘ì— í•˜ê²Œ í•´ì•¼ í• ë“¯ ì™¼ìª½ í´ë¦­ì€ ì—‘í„° ì„ íƒìœ¼ë¡œ ë¶„ë¦¬í•˜ì
 void APlayerCharacter::OnIAAttackStarted(const FInputActionValue& Value)
 {
-	//ÇàÀ§°¡ °¡´ÉÇÒ ¶§¸¸ °ø°İÀ» ÇÑ´Ù ¿¹¿Ü. ½ºÅÏ/´Ù¸¥¾×ÆÃ/³ôÀºµ¥¼­ÀÇÂøÁö¸ğ¼Ç µî 
+	//í–‰ìœ„ê°€ ê°€ëŠ¥í•  ë•Œë§Œ ê³µê²©ì„ í•œë‹¤ ì˜ˆì™¸. ìŠ¤í„´/ë‹¤ë¥¸ì•¡íŒ…/ë†’ì€ë°ì„œì˜ì°©ì§€ëª¨ì…˜ ë“± 
 	if (CanCharacterAct())
 	{
-		//°øÁß °ø°İ ¿¬»ç ½Ã °É¸± ¼ö ÀÖ´Â ·£µù ¹«ÇÑ°á¼ÓµÊ Çö»óÀÇ ÀÓ½Ã ÇØ°á (¹ß»ı °¡´É¼º ³·À½)
-		mCharacterState.ClearState(mCharacterState.LANDING);
-
-		if (mAnimInst)
-		{
-			//ÇöÀç µé°í ÀÖ´Â ¾Ö´ÔÀÎ½ºÅÏ½º¿¡¼­ °ø°İ¸ùÅ¸ÁÖ¸¦ ¹Ş¾Æ¿À°í ¼º°øÇÏ¸é ½ÇÇà
-			UAnimMontage* AttackMontage = mAnimInst->GetAttakMontage();
-			if (AttackMontage)
-			{
-				//ÇÃ·¡±×¸¦ ¼³Á¤ÇÑ´Ù ACTING : ON  -- ²¨Áú¶§±îÁö ´ÙÀ½ ÇàÀ§¸¦ ¸øÇÑ´Ù
-				mCharacterState.SetState(mCharacterState.ACTING);
-
-				//ÄŞº¸ »óÅÂÀÎ °æ¿ì ÀÎµ¦½º ¼øÈ¯ Ã³¸®
-				if (mCharacterState.HasState(mCharacterState.COMBO))
-				{
-					//´ÙÀ½ ¸ùÅ¸ÁÖ ¼½¼ÇÀÇ ÀÎµ¦½º·Î ¼øÈ¯ º¯°æÇÑ´Ù
-					mAnimInst->mSectionIndex 
-						= (mAnimInst->mSectionIndex + 1) % mAnimInst->mAttackSectionArray.Num();
-					//´ÙÀ½ Àç»ıÇÒ ¸ùÅ¸ÁÖ ÀÌ¸§ÇÒ´ç(µğ¹ö±× Ãâ·Â¿ë)
-					//FName NextSectionName = mAnimInst->mAttackSectionArray[mAnimInst->mSectionIndex];
-				}
-				//ÄŞº¸°¡ ¾Æ´Ñ°æ¿ì ÀÎµ¦½º ÃÊ±âÈ­
-				else
-				{
-					mAnimInst->mSectionIndex = 0;
-				}
-
-				//ÇöÀç ÀÎµ¦½º¸¦ È°¿ëÇÏ¿© Àç»ıÇÏ·Á´Â °ø°İ¼½¼ÇÀÇ ÀÌ¸§À» ¹Ş¾Æ¿Â´Ù
-				FName SectionName = mAnimInst->mAttackSectionArray[mAnimInst->mSectionIndex];
-				
-				//Ä¿½ºÅÒÇÔ¼ö: °ø°İ ¸ùÅ¸ÁÖ¿¡¼­ 
-				//ÇöÀç ÇÒ´çµÈ ¼½¼ÇÀÇ ÀÌ¸§À» »ç¿ëÇÏ¿© ±× ¼½¼ÇÀ» ¹Ù·Î Àç»ı½ÃÅ²´Ù 
-				mAnimInst->PlayMontageSection(AttackMontage, SectionName);
-				
-				//µğ¹ö±ëÃâ·Â ÇöÀç Àç»ı ¸ùÅ¸ÁÖ ÀÌ¸§°ú ÀÎµ¦½º 
-				UE_LOG(TestGame, Display,
-					TEXT("Current Playing Montage [%s],\tIndex[%d]"),
-					*SectionName.ToString(),
-					mAnimInst->mSectionIndex);
-
-				//ÇöÀç ¾×ÅÍÀÇ À§Ä¡¿Í È¸Àü°ª¿¡ ¸ÂÃß±â À§ÇØ °ªÀ» °¡Á®¿È
-				FVector SpawnLocation = GetActorLocation() + GetActorForwardVector() * 100.0f;
-				FRotator SpawnRotation = GetActorRotation();
-
-				//AATestProjectile Å¬·¡½º·Î Åõ»çÃ¼¸¦ »ı¼ºÇÔ
-				AATestProjectile* Projectile = GetWorld()->SpawnActor<AATestProjectile>(mProjectileClass, SpawnLocation, SpawnRotation);
-				if (bDebugEnabled)
-					UE_LOG(PlayerLog, Display, TEXT("Character : Attack"));
-			}
-			else
-				UE_LOG(TestGame, Warning, TEXT("No Montage for this action exists"));
-		}
-		else
-		{
-			UE_LOG(TestGame, Warning, TEXT("No AnimInst for this class exists"));
-		}
+			//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ì˜ PlayAttack ì„ í˜¸ì¶œí•œë‹¤
+			mAnimInst->PlayAttack();
 	}
 }
 
 void APlayerCharacter::OnIAAttackTriggered(const FInputActionValue& Value)
 {
-	OnIAAttackStarted(Value);
+	//ëª©í‘œì§€ì—­ ì„ íƒ ì¤‘ì´ ì•„ë‹ë•Œë§Œ ì‹¤í–‰
+	/*if (!GetPreviewCastActivation())
+	OnIAAttackStarted(Value);*/
+	//í–‰ìœ„ê°€ ê°€ëŠ¥í•  ë•Œë§Œ ê³µê²©ì„ í•œë‹¤ ì˜ˆì™¸. ìŠ¤í„´/ë‹¤ë¥¸ì•¡íŒ…/ë†’ì€ë°ì„œì˜ì°©ì§€ëª¨ì…˜ ë“± 
+	if (CanCharacterAct())
+	{
+		//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ì˜ PlayAttack ì„ í˜¸ì¶œí•œë‹¤
+		mAnimInst->PlayAttack();
+	}
 }
 
 void APlayerCharacter::OnIACamRotateTriggered(const FInputActionValue& Value)
 {		
-	//È¸Àü °ª FRotator °è»ê
-	//ÀÔ·Â°ª¿¡¼­ X ¹× Y °ªÀ» °¡Á®¿Â´Ù
+	//íšŒì „ ê°’ FRotator ê³„ì‚°
+	//ì…ë ¥ê°’ì—ì„œ X ë° Y ê°’ì„ ê°€ì ¸ì˜¨ë‹¤
 	FVector2D Input = Value.Get<FVector2D>();
-		/* ÀÔ·Â°ª »ó¼¼ Á¤º¸
-			1. ¸¶¿ì½º ÀÌµ¿ÇÏ±â (°¡¼Óµµ¿¡ °¡º¯ÇÏ´Â ½Ç¼ö)
-				ÁÂÃøÀÌµ¿   -X 
-				¿ìÃøÀÌµ¿	+X 
-				»ó¹æÀÌµ¿	-Y
-				ÇÏ¹æÀÌµ¿	+Y
-			2. °ÔÀÓÆĞµå ¿ìÃø½ºÆ½ ±â¿ïÀÌ±â ( 0 ~ 1  ½Ç¼ö,  À½¼öÀÇ °æ¿ì -1 ~ 0)
-				ÁÂÃøÀ¸·Î±â¿ïÀÌ±â		-X
-				¿ìÃøÀ¸·Î±â¿ïÀÌ±â		+X
-				À§·Î¿ïÀÌ±â			+Y
-				¾Æ·¡·Î±â¿ïÀÌ±â		-Y				*/
+		/* ì…ë ¥ê°’ ìƒì„¸ ì •ë³´
+			1. ë§ˆìš°ìŠ¤ ì´ë™í•˜ê¸° (ê°€ì†ë„ì— ê°€ë³€í•˜ëŠ” ì‹¤ìˆ˜)
+				ì¢Œì¸¡ì´ë™   -X 
+				ìš°ì¸¡ì´ë™	+X 
+				ìƒë°©ì´ë™	-Y
+				í•˜ë°©ì´ë™	+Y
+			2. ê²Œì„íŒ¨ë“œ ìš°ì¸¡ìŠ¤í‹± ê¸°ìš¸ì´ê¸° ( 0 ~ 1  ì‹¤ìˆ˜,  ìŒìˆ˜ì˜ ê²½ìš° -1 ~ 0)
+				ì¢Œì¸¡ìœ¼ë¡œê¸°ìš¸ì´ê¸°		-X
+				ìš°ì¸¡ìœ¼ë¡œê¸°ìš¸ì´ê¸°		+X
+				ìœ„ë¡œìš¸ì´ê¸°			+Y
+				ì•„ë˜ë¡œê¸°ìš¸ì´ê¸°		-Y				*/
 
-	//È¸Àü¼ÓµµÀÇ ¹èÀ² Á¤ÀÇÇÑ´Ù
+	//íšŒì „ì†ë„ì˜ ë°°ìœ¨ ì •ì˜í•œë‹¤
 	float RotationSpeed = 2.0f;
-	//¼¼·ÎÈ¸Àü°¢ÀÇ ÇÑ°è¸¦ Á¤ÀÇÇÑ´Ù
+	//ì„¸ë¡œíšŒì „ê°ì˜ í•œê³„ë¥¼ ì •ì˜í•œë‹¤
 	float MaxPitchLimit = 75.0f;
-	//ÃàµÚÆ²¸² ¹æÁö¿ë: ¼ø°£ÀûÀ¸·Î 90µµ¸¦ ÃÊ°úÇÏ´Â ³Ê¹« Å« °ª Ã³¸®
+	//ì¶•ë’¤í‹€ë¦¼ ë°©ì§€ìš©: ìˆœê°„ì ìœ¼ë¡œ 90ë„ë¥¼ ì´ˆê³¼í•˜ëŠ” ë„ˆë¬´ í° ê°’ ì²˜ë¦¬
 	Input.Y = (85 - MaxPitchLimit) < RotationSpeed * Input.Y 
 		? (85 - MaxPitchLimit) / RotationSpeed 
 		: Input.Y;
@@ -394,63 +514,63 @@ void APlayerCharacter::OnIACamRotateTriggered(const FInputActionValue& Value)
 		? (MaxPitchLimit - 85) / RotationSpeed
 		: Input.Y;
 
-	//½ºÇÁ¸µ¾Ï Á¸Àç¸¦ Ã¼Å©ÇÏ°í³ª¼­
-	//ÀÔ·Â¹ŞÀº µÎ Ãà°ª(float)À» 
-	// ½ºÇÁ¸µ¾ÏÀÇ »ó´ë È¸ÀüÀÇ °¢ ¿ä¼Ò¿¡ °¡»êÇÑ´Ù
-	// ** Æ®·£½ºÆû Ã¢ ¼ø¼­´Â  Roll, Yaw, Pitch
+	//ìŠ¤í”„ë§ì•” ì¡´ì¬ë¥¼ ì²´í¬í•˜ê³ ë‚˜ì„œ
+	//ì…ë ¥ë°›ì€ ë‘ ì¶•ê°’(float)ì„ 
+	// ìŠ¤í”„ë§ì•”ì˜ ìƒëŒ€ íšŒì „ì˜ ê° ìš”ì†Œì— ê°€ì‚°í•œë‹¤
+	// ** íŠ¸ëœìŠ¤í¼ ì°½ ìˆœì„œëŠ”  Roll, Yaw, Pitch
 	
 	if (mSpringArm)
 	{
-		//¿ÀÀÏ·¯ È¸Àü
-		//// ÇöÀç ½ºÇÁ¸µ¾ÏÀÇ È¸Àü°ªÀ» °¡Á®¿Â´Ù
+		//ì˜¤ì¼ëŸ¬ íšŒì „
+		//// í˜„ì¬ ìŠ¤í”„ë§ì•”ì˜ íšŒì „ê°’ì„ ê°€ì ¸ì˜¨ë‹¤
 		//FRotator NewRotation = mSpringArm->GetRelativeRotation();
 		//
-		//// À§¾Æ·¡ ÀÔ·Â½Ã   Pitch ¿¡ °¡»ê +,  ¾Æ·¡·Î ÀÔ·Â½Ã  -
+		//// ìœ„ì•„ë˜ ì…ë ¥ì‹œ   Pitch ì— ê°€ì‚° +,  ì•„ë˜ë¡œ ì…ë ¥ì‹œ  -
 		//NewRotation.Pitch += Input.Y * RotationSpeed; 
-		//// ÁÂ¿ì ÀÔ·Â ½Ã Yaw¿¡ °¡»ê, ÁÂ- ¿ì+
+		//// ì¢Œìš° ì…ë ¥ ì‹œ Yawì— ê°€ì‚°, ì¢Œ- ìš°+
 		//NewRotation.Yaw += Input.X * RotationSpeed;
 		//
-		//***¿ÀÀÏ·¯ È¸ÀüÀÇ ¹®Á¦ ¿ÏÈ­ 
-		//1. Pitch Á¦ÇÑ Àû¿ë
+		//***ì˜¤ì¼ëŸ¬ íšŒì „ì˜ ë¬¸ì œ ì™„í™” 
+		//1. Pitch ì œí•œ ì ìš©
 		//if (FMath::Abs(NewRotation.Pitch) >= 85.0f)
 		//	NewRotation.Pitch = FMath::Clamp(NewRotation.Pitch, -85.0f, 85.0f);
-		////È¸Àü °ªÀ» Àû¿ëÇÑ´Ù
+		////íšŒì „ ê°’ì„ ì ìš©í•œë‹¤
 		//mSpringArm->SetRelativeRotation(NewRotation);
 
-		//2. ÄõÅÍ´Ï¾ğ È°¿ë
+		//2. ì¿¼í„°ë‹ˆì–¸ í™œìš©
 		FQuat CurrentQuat = mSpringArm->GetRelativeRotation().Quaternion();
 
-		// ÀÔ·Â°ªÀ» ±â¹İÀ¸·Î È¸Àü º¯È¯ »ı¼º (Yaw ¸ÕÀú, Pitch ³ªÁß)
+		// ì…ë ¥ê°’ì„ ê¸°ë°˜ìœ¼ë¡œ íšŒì „ ë³€í™˜ ìƒì„± (Yaw ë¨¼ì €, Pitch ë‚˜ì¤‘)
 		FQuat PitchQuat = FQuat(FVector::RightVector, FMath::DegreesToRadians(-Input.Y * RotationSpeed));
 		FQuat YawQuat = FQuat(FVector::UpVector, FMath::DegreesToRadians(Input.X * RotationSpeed));
 	
-		// »õ·Î¿î È¸Àü Àû¿ë
-		//FQuat NewQuat = YawQuat * CurrentQuat * PitchQuat;    //±âº» ¹æ¹ı
-		// Pitch Á¦ÇÑ ¹æ½Ä : Yaw ¸¦ Á¦¿ÜÇØµĞ´Ù
+		// ìƒˆë¡œìš´ íšŒì „ ì ìš©
+		//FQuat NewQuat = YawQuat * CurrentQuat * PitchQuat;    //ê¸°ë³¸ ë°©ë²•
+		// Pitch ì œí•œ ë°©ì‹ : Yaw ë¥¼ ì œì™¸í•´ë‘”ë‹¤
 		FQuat NewQuat = CurrentQuat * PitchQuat;	
 		
 		// PitchQuat * YawQuat * CurrentQuat;
-		// È¸Àü ¼ø¼­´Â Pitch 90 ÁöÁ¡¿¡¼­  Y ¿Í Z °¡ µÚÆ²¸®´Â¹®Á¦¸¦ ÇØ°áÇÑ´Ù. 
-		// ÇÏÁö¸¸ ÇØ´çÁöÁ¡¿¡ µµ´ŞÇÏ¸é  Y È¸ÀüÇÏ¸é¼­ ÇÇÄ¡°¡ ¿ª¹æÇâÀ¸·Î µÇµ¹¾Æ°¡´Â ÇüÅÂ¸¦ ¶è´Ù
+		// íšŒì „ ìˆœì„œëŠ” Pitch 90 ì§€ì ì—ì„œ  Y ì™€ Z ê°€ ë’¤í‹€ë¦¬ëŠ”ë¬¸ì œë¥¼ í•´ê²°í•œë‹¤. 
+		// í•˜ì§€ë§Œ í•´ë‹¹ì§€ì ì— ë„ë‹¬í•˜ë©´  Y íšŒì „í•˜ë©´ì„œ í”¼ì¹˜ê°€ ì—­ë°©í–¥ìœ¼ë¡œ ë˜ëŒì•„ê°€ëŠ” í˜•íƒœë¥¼ ëˆë‹¤
 		//    FQuat NewQuat = PitchQuat * YawQuat * CurrentQuat;
 
 		NewQuat.Normalize();
 
-		// ÇöÀç Pitch °ªÀ» ÄõÅÍ´Ï¾ğ¿¡¼­ Á÷Á¢ °¡Á®¿Í Á¦ÇÑÀ» Àû¿ë
+		// í˜„ì¬ Pitch ê°’ì„ ì¿¼í„°ë‹ˆì–¸ì—ì„œ ì§ì ‘ ê°€ì ¸ì™€ ì œí•œì„ ì ìš©
 		FVector ForwardVector = NewQuat.GetForwardVector();
 		FRotator RotationFromQuat = ForwardVector.Rotation();
-		//Á¦ÇÑ Àû¿ë : »óÇÏ Ä«¸Ş¶óÈ¸ÀüÀº ¾Æ·¡¿Í °°ÀÌ Á¦ÇÑÇÑ´Ù
+		//ì œí•œ ì ìš© : ìƒí•˜ ì¹´ë©”ë¼íšŒì „ì€ ì•„ë˜ì™€ ê°™ì´ ì œí•œí•œë‹¤
 		RotationFromQuat.Pitch = FMath::Clamp(RotationFromQuat.Pitch, -MaxPitchLimit, MaxPitchLimit);
 
-		// Á¦ÇÑµÈ Pitch¸¦ ¹İ¿µÇÏ¿© ÄõÅÍ´Ï¾ğ »ı¼º ÈÄ Yaw ¸¦ Àû¿ë
+		// ì œí•œëœ Pitchë¥¼ ë°˜ì˜í•˜ì—¬ ì¿¼í„°ë‹ˆì–¸ ìƒì„± í›„ Yaw ë¥¼ ì ìš©
 		FQuat ClampedQuat = FQuat::MakeFromRotator(RotationFromQuat);
 		ClampedQuat.Normalize();
 
 		FQuat FinalQuat = YawQuat * ClampedQuat;
 		mSpringArm->SetRelativeRotation(FinalQuat);
 
-		////¼ø°£ Pitch º¯È­·® Á¦ÇÑ ·ÎÁ÷ µ¨Å¸ÀÇ ÇÑ°è¸¸µé±â
-		//// Pitch ¿¡ º¯È­·® Á¦ÇÑÀ» Àû¿ëÇÑ´Ù
+		////ìˆœê°„ Pitch ë³€í™”ëŸ‰ ì œí•œ ë¡œì§ ë¸íƒ€ì˜ í•œê³„ë§Œë“¤ê¸°
+		//// Pitch ì— ë³€í™”ëŸ‰ ì œí•œì„ ì ìš©í•œë‹¤
 		//float PitchDelta = RotationFromQuat.Pitch - PrevPitch;
 		//PitchDelta = FMath::Clamp(PitchDelta, -MaxPitchChange, MaxPitchChange);
 		//RotationFromQuat.Pitch = PrevPitch + PitchDelta;
@@ -458,23 +578,34 @@ void APlayerCharacter::OnIACamRotateTriggered(const FInputActionValue& Value)
 		//FQuat ClampedQuat = FQuat::MakeFromRotator(RotationFromQuat);
 		//ClampedQuat.Normalize();
 
-		//// ÃÖÁ¾ÀûÀ¸·Î Àû¿ë
+		//// ìµœì¢…ì ìœ¼ë¡œ ì ìš©
 		//mSpringArm->SetRelativeRotation(ClampedQuat);
 
-		//// ÀÌÀü Pitch °ª °»½Å
+		//// ì´ì „ Pitch ê°’ ê°±ì‹ 
 		//PrevPitch = RotationFromQuat.Pitch;
 
-		//3. Roll °ª º¸Á¤
-		//Roll À» °­Á¦·Î ÃÊ±âÈ­ÇÏ¿© Àü´ŞÇÑ´Ù
+		//3. Roll ê°’ ë³´ì •
+		//Roll ì„ ê°•ì œë¡œ ì´ˆê¸°í™”í•˜ì—¬ ì „ë‹¬í•œë‹¤
 		//mSpringArm->SetRelativeRotation(FRotator(NewRotation.Pitch, NewRotation.Yaw, 0));
 		
-		//¾Ö´ÔÀÎ½ºÅÏ½º¿¡µµ ÀÌ Á¤º¸¸¦ °Ç³×ÁØ´Ù
-		// Áü¹ú¶ô ÇØ°á¹æ¹ı 1. ·ÎÅ×ÀÌÅÍ Y Å¬·¥ÇÁ ÀÏ ¶§ Àü´Ş¹æ¹ı
+		//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ì—ë„ ì´ ì •ë³´ë¥¼ ê±´ë„¤ì¤€ë‹¤
+		// ì§ë²Œë½ í•´ê²°ë°©ë²• 1. ë¡œí…Œì´í„° Y í´ë¨í”„ ì¼ ë•Œ ì „ë‹¬ë°©ë²•
 		//mAnimInst->SetCamRotateByInput(NewRotation);
-		// Áü¹ú¶ô ÇØ°á¹æ¹ı 2. ÄõÅÍ´Ï¾ğ È¸Àü  ÀÏ ¶§ Àü´Ş¹æ¹ı
-		mAnimInst->SetCamRotateByInput(FinalQuat.Rotator());
-		
-		//µğ¹ö±ë Ãâ·Â¿ë
+		// ì§ë²Œë½ í•´ê²°ë°©ë²• 2. ì¿¼í„°ë‹ˆì–¸ íšŒì „  ì¼ ë•Œ ì „ë‹¬ë°©ë²•
+		if(!bIsRightMouseButtonPressed)
+			mAnimInst->SetCamRotateByInput(FinalQuat.Rotator());
+	
+		// ì¶”ê°€: ë§ˆìš°ìŠ¤ ìš°í´ë¦­ ìƒíƒœë¼ë©´ ìºë¦­í„° ë©”ì‰¬ë„ íšŒì „
+		if (bIsRightMouseButtonPressed && !(mAnimInst->HasPlayerAnim(EPlayerAnim::Dash)))
+		{
+			FRotator FinalRotation = FinalQuat.Rotator();
+			FRotator MeshRotation = GetMesh()->GetRelativeRotation();
+			//Yaw ê°’ë§Œ ë°˜ì˜
+			MeshRotation.Yaw = FinalRotation.Yaw - 90.f;  //ë©”ì‰¬ ë°©í–¥ ì›”ë“œ ë¶ˆì¼ì¹˜ ë³´ì •
+			GetMesh()->SetRelativeRotation(MeshRotation);
+		}
+
+		//ë””ë²„ê¹… ì¶œë ¥ìš©
 		if (bDebugEnabled)
 		{
 			FString OutputString;
@@ -504,12 +635,192 @@ void APlayerCharacter::OnIACamRotateTriggered(const FInputActionValue& Value)
 				break;
 			}
 
-			//µğ¹ö±×
+			//ë””ë²„ê·¸
 			UE_LOG(TestGame,
 				Log,
 				TEXT("Camera Rotate key triggered [%s],\t Rotate [%s]"), *OutputString, *FinalQuat.Rotator().ToString()	);
 		}
 	}
+}
+
+void APlayerCharacter::OnIACharacterRotateTriggered(const FInputActionValue& Value)
+{
+	bIsRightMouseButtonPressed = true;
+}
+
+void APlayerCharacter::OnIACharacterRotateCompleted(const FInputActionValue& Value)
+{
+	bIsRightMouseButtonPressed = false;
+}
+
+void APlayerCharacter::OnIADashStarted(const FInputActionValue& Value)
+{
+	if (IsCharacterImmobilized() ||
+		mCharacterState.HasState(mCharacterState.ACTING)
+		|| mAnimInst->GetPlayerAnim() == EPlayerAnim::Dash)
+		//í•´ë‹¹ ì†ë„ì˜ ì¹´ë©”ë¼ ë°©í–¥ìœ¼ë¡œ ëŒ€ì‹œë¥¼ í•œë‹¤
+		return;
+	else
+		//Dash Sfx ë¥¼ ì¬ìƒì‹œí‚¨ë‹¤
+		UGameplayStatics::PlaySoundAtLocation(GetWorld(),
+			mSfxDash,
+			GetActorLocation());
+	//ì‹¤ì œë¡œ ì´ë™ì„ ì‹œí‚¨ë‹¤
+	
+	//ì”ìƒì„ ë§Œë“¤ì–´ë‚´ê¸° ìœ„í•˜ì—¬ ì£¼ê¸°ì ìœ¼ë¡œ íƒ€ì´ë¨¸ë¥¼ ìƒì„±í•œë‹¤
+	if (!mDashAfterImageTimerHandler.IsValid())
+	{
+		GetWorldTimerManager().SetTimer(mDashAfterImageTimerHandler, this, &APlayerCharacter::AfterImageLoop, 0.03f, true, 0.01f);
+		// íƒ€ì´ë¨¸í•´ì œ
+		// GetWorldTimerManager().ClearTimer(mDashAfterImageTimerHandler);
+	}
+
+		Dash(2000.f);
+}
+
+void APlayerCharacter::OnIASprintTriggered(const FInputActionValue& Value)
+{
+	Sprint();
+}
+
+void APlayerCharacter::OnIASprintCompleted(const FInputActionValue& Value)
+{
+	StopSprint();
+}
+
+void APlayerCharacter::OnIASpecialStarted(const FInputActionValue& Value)
+{
+	if (!CanCharacterAct() ||
+		mCharacterState.HasState(mCharacterState.ACTING)
+		|| mAnimInst->GetPlayerAnim() == EPlayerAnim::Special)
+	{
+		return;
+	}
+		mCharacterState.SetState(mCharacterState.ACTING);
+		mAnimInst->SetPlayerAnim(EPlayerAnim::Special);
+		SpecialAttack();
+		mAnimInst->PlaySpecial();
+}
+
+void APlayerCharacter::OnIAPreviewThanCastStarted(const FInputActionValue& Value)
+{
+	//Value.GetValueType
+	
+	//í–‰ìœ„ê°€ ê°€ëŠ¥í•œ ê²½ìš°ì—ë§Œ ì‚¬ìš©í•œë‹¤
+	if (!CanCharacterAct())
+	{
+		return;
+	}
+		//ë²”ìœ„ë¥¼ ì„ íƒ ì¤‘ì¸ ê²½ìš° ë²”ìœ„í‘œì‹œë¥¼ í•´ì œí•œë‹¤ (ìì‹í´ë˜ìŠ¤ì—ì„œ ì¬ì •ì˜)
+		if (GetPreviewCastActivation())
+		{	
+			UE_LOG(TestGame, Display, TEXT("An selecting zone has been canceled by player"));
+			CancelPreviewCastZone();
+			SetPreviewCastActivation(false);
+			return;
+		}
+		//ë²”ìœ„ ì„ íƒ ì¤‘ì´ ì•„ë‹Œ ê²½ìš° ë²”ìœ„ë¥¼ í‘œì‹œí•œë‹¤ (ìì‹í´ë˜ìŠ¤ì—ì„œ ì¬ì •ì˜)
+		else
+		{
+			UE_LOG(TestGame, Display, TEXT("Select zone cast a skill"));
+			SetPreviewCastActivation(true);
+			MakePreviewCastZone();
+		}
+}
+
+void APlayerCharacter::OnIAAcceptCastStarted(const FInputActionValue& Value)
+{
+	//ì•¡ì…˜ ë¶ˆëŠ¥ì¸ê²½ìš° ë¦¬í„´
+	if (!CanCharacterAct())
+		return;
+
+	//ëª©í‘œì§€ì—­ ì„ íƒì¤‘ -> ìŠ¤í‚¬ ì»¨íŒ
+	if(GetPreviewCastActivation())
+	{
+		UE_LOG(TestGame, Display, TEXT("Accept Preview Cast Zone"));
+		AcceptPreviewCastZone();
+		SetPreviewCastActivation(false);
+	}
+}
+
+
+void APlayerCharacter::OnIACancelCastStarted(const FInputActionValue& Value)
+{
+	//ì•¡ì…˜ ë¶ˆëŠ¥ì¸ê²½ìš° ë¦¬í„´
+	if (!CanCharacterAct())
+		return;
+
+	//ëª©í‘œì§€ì—­ ì„ íƒì¤‘ -> ì·¨ì†Œ 
+	if (GetPreviewCastActivation())
+	{
+		UE_LOG(TestGame, Display, TEXT("Cancel Preview Cast Zone"));
+		CancelPreviewCastZone();
+		SetPreviewCastActivation(false);
+	}
+}
+
+void APlayerCharacter::OnIACleaveStarted(const FInputActionValue& Value)
+{
+	if (!CanCharacterAct() || mAnimInst->GetPlayerAnim() == EPlayerAnim::Cleave)
+	{
+		return;
+	}
+	mCharacterState.SetState(mCharacterState.ACTING);
+	mAnimInst->SetPlayerAnim(EPlayerAnim::Cleave);
+	CleaveAttack();
+	mAnimInst->PlayCleave();
+}
+
+void APlayerCharacter::OnIAPlayerInfoPanelStarted(const FInputActionValue& Value)
+{
+	UE_LOG(TestGame, Warning, TEXT("OnIAPlayerInfoPanelStarted --> "));
+	
+	//1. ì‹±ê¸€í„´ ë§¤ë‹ˆì €ë¡œë¶€í„° Panel ìœ„ì ¯ì„ ë°›ì•„ì˜¨ë‹¤
+	UMainWidget* MainWidget = CWidgetManager::GetInst()->FindWidget<UMainWidget>(TEXT("MainWidget"));
+	
+	if (MainWidget)
+	{
+		//ì¼œì§€ëŠ” ê²½ìš°ëŠ” ì •ë³´ë¥¼ ì—…ë°ì´íŠ¸ í•œë‹¤
+		if (MainWidget->GetCharacterInfoPanelVisibility() == ESlateVisibility::Collapsed)
+		{
+			UCharacterInfoWidget* InfoPanelWidget = CWidgetManager::GetInst()->FindWidget< UCharacterInfoWidget>(TEXT("CharacterInfoWidget"));
+			if (InfoPanelWidget)
+			{
+				ICharacterPublicInterface* Info = Cast<ICharacterPublicInterface>(this);
+				if(Info)
+					InfoPanelWidget->UpdatePlayerInfo(Info);
+			}
+		}
+
+		// main -> ToggleCharacterInfoPanel()
+		MainWidget->ToggleCharacterInfoPanel();
+		// main -> GetCharacterInfoPanelVisibility()
+	}
+	UE_LOG(TestGame, Warning, TEXT("\t\t -->  CharacterInfoWidget Not Found"));
+}
+
+void APlayerCharacter::OnIASelectCharacterStarted(const FInputActionValue& Value)
+{
+	//ë²”ìœ„ ì„ íƒì¤‘ ì•„ë‹ˆë©´ ì„ íƒë„ ë³‘í–‰ìœ¼ë¡œ ì‹¤í–‰
+	if (!GetPreviewCastActivation())
+	{
+		//ë§ˆìš°ìŠ¤ ì—‘í„° ì¶©ëŒì´ ìˆì„ ìˆ˜ ìˆìœ¼ë‹ˆ ì²´í¬í•œë‹¤
+		APlayerControllerTestGame* PC = Cast<APlayerControllerTestGame>(GetWorld()->GetFirstPlayerController());
+		if (PC)
+		{
+			PC->SelectNPC();
+		}
+	}
+}
+
+void APlayerCharacter::OnIAPanelSkillStarted(const FInputActionValue& Value)
+{
+	CWidgetManager::GetInst()->FindWidget<UMainWidget>(TEXT("MainWidget"))->ButtonSkillOnClicked();
+}
+
+void APlayerCharacter::OnIAPanelInvStarted(const FInputActionValue& Value)
+{
+	CWidgetManager::GetInst()->FindWidget<UMainWidget>(TEXT("MainWidget"))->ButtonInvOnClicked();
 }
 
 void APlayerCharacter::MoveToAxis(const FVector& Axis, const float ScaleValue)
@@ -519,10 +830,428 @@ void APlayerCharacter::MoveToAxis(const FVector& Axis, const float ScaleValue)
 	else
 		AddMovementInput(Axis);
 }
+void APlayerCharacter::NormalAttack()
+{
+
+}
+
+void APlayerCharacter::SpecialAttack()
+{
+
+}
+
+void APlayerCharacter::CleaveAttack()
+{
+}
+
+void APlayerCharacter::Dash(float DashSpeed)
+{
+	//ì¼€ë¦­í„°ë¬´ë¸Œë¨¼íŠ¸ì»´í¬ë„ŒíŠ¸ê°€ ìˆê³   
+	// Immobilized ìƒíƒœê°€ ì•„ë‹ˆë©°, ëŒ€ì‹œì¤‘ì´ ì•„ë‹ë•Œë§Œ ì‹œì „í•œë‹¤
+	if (GetCharacterMovement() && !IsCharacterImmobilized() && !(mAnimInst->HasPlayerAnim(EPlayerAnim::Dash)))
+	{
+		mCharacterState.SetState(mCharacterState.ACTING);
+		//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ì˜ PlayDash ë¥¼ í˜¸ì¶œí•œë‹¤
+		mAnimInst->PlayDash();
+
+		////ì§€ìƒì— ìˆì„ ê²½ìš° ì¶©ëŒ(ë¸”ëŸ­) ë“±ìœ¼ë¡œ ëŒ€ì‹œê±°ë¦¬ê°€ ì§§ê¸° ë–„ë¬¸ì—
+		////ì¼ì • ìŠ¹ìˆ˜ë¡œ ë³´ì •ì„ í•´ì¤€ë‹¤  
+		//if (GetCharacterMovement()->IsMovingOnGround())
+		//	DashSpeed *= 5.0f;
+
+		FVector DashDirection;
+	
+		if (!GetCharacterMovement()->Velocity.IsNearlyZero() && 
+			GetCharacterMovement()->IsMovingOnGround())
+		{
+			// ë°”ë‹¥ì—ì„œ ì´ë™ ì¤‘ì´ë¼ë©´ í•´ë‹¹ ë°©í–¥ì„ ê¸°ì¤€ìœ¼ë¡œ ì¡ëŠ”ë‹¤
+			DashDirection = GetCharacterMovement()->Velocity.GetSafeNormal();
+			DashDirection.Z = 0;
+			DashDirection.Normalize();
+		}
+
+		else
+		{
+			//ê·¸ë¼ìš´ë“œ ì´ë™ì¤‘ì´ ì•„ë‹ˆë¼ë©´ ì¹´ë©”ë¼ ë°©í–¥ì„ ê¸°ì¤€ìœ¼ë¡œ ì¡ëŠ”ë‹¤
+			DashDirection = mCamera->GetForwardVector();
+			DashDirection.Z = 0;
+			DashDirection.Normalize();
+
+			//ë©”ì‰¬ì˜ ì¢Œìš° íšŒì „ê°’ì„ ëŒ€ì‰¬ ë°©í–¥ìœ¼ë¡œ í•˜ê¸° ìœ„í•œ ì²˜ë¦¬ì´ë‹¤
+			FRotator MeshRotation = DashDirection.Rotation();
+			//ë©”ì‰¬ê°€ ê¸°ë³¸ì ìœ¼ë¡œ -90 Yaw ë§Œí¼ ë³´ì •ëœ ìƒíƒœì´ë¯€ë¡œ íšŒì „ê°’ì— ë°˜ì˜í•´ì¤€ë‹¤
+			MeshRotation.Yaw -= 90.0f; // Yaw ë³´ì •
+			MeshRotation.Pitch = 0.f;
+			MeshRotation.Roll = 0.f;
+
+			//ê³„ì‚°ëœ íšŒì „ê°’ìœ¼ë¡œ ë©”ì‰¬ë¥¼ íšŒì „ì‹œí‚¨ë‹¤
+			GetMesh()->SetWorldRotation(MeshRotation);
+		}
+
+		//ì§€í˜• ê¸°ìš¸ê¸° ê¸°ë°˜ ë³´ì • -> ë‚´ì êµ¬í•´ì„œ 
+		FHitResult Hit;
+		FVector Start = GetActorLocation();
+		FVector End = Start - FVector(0, 0, 1200.0f);
+
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
+
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		{
+			FVector SurfaceNormal = Hit.ImpactNormal;
+			float SlopeFactor = FVector::DotProduct(SurfaceNormal, FVector::UpVector); // 1.0 = í‰ì§€, 0.0 = ìˆ˜ì§ë©´
+
+			float DashBoost = FMath::Clamp(SlopeFactor, 0.3f, 1.0f); // ê²½ì‚¬ì— ë”°ë¼ ìµœì†Œ~ìµœëŒ€ ë³´ì •
+			DashSpeed *= DashBoost;
+		}
+
+		//ì „ë‹¬ë°›ì€ ì¸ìê°€ ëŒ€ì‹œì˜ ì†ë„ì™€ ê¸¸ì´ë¥¼ ê²°ì •í•œë‹¤
+		FVector DashVelocity = DashDirection * DashSpeed;
+		LaunchCharacter(DashVelocity, true, true);
+	}
+}
+
+void RestoreGravity()
+{
+	
+}
+
+void APlayerCharacter::Sprint()
+{
+	if (GetCharacterMovement())
+	{
+		//GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed * 1.4f; // ì´ë™ì†ë„ë¥¼ ê³±í•œë§Œí¼ ë¹¨ë¼ì§€ê²Œ í•¨
+	}
+}
+
+void APlayerCharacter::StopSprint()
+{
+	if (GetCharacterMovement())
+	{
+		//GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed; // ì›ë˜ ì†ë„ë¡œ ë³µê·€
+	}
+}
+
+void APlayerCharacter::MakePreviewCastZone()
+{
+}
+
+void APlayerCharacter::CancelPreviewCastZone()
+{
+}
+
+void APlayerCharacter::AcceptPreviewCastZone()
+{
+}
+
+void APlayerCharacter::InitCastZoneSkill()
+{
+}
+
+void APlayerCharacter::AfterImageLoop()
+{
+	double  SpeedThresold = (double)(GetCharacterMovement()->MaxWalkSpeed * 1.2f);
+	//í˜„ì¬ ì¼€ë¦­í„°ì˜ ì†ë„ë¥¼ ì²´í¬í•´ì„œ ì”ìƒì´ ì´ë™ì¤‘ì—ë§Œ ë‚¨ê²Œ ì¶”ê°€ ì²˜ë¦¬í•œë‹¤
+	if (GetVelocity().Size() > SpeedThresold)
+	{
+		FActorSpawnParameters	param;
+		param.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		FVector Location = GetActorLocation();
+
+		Location.Z -= GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		FRotator	RotMesh = GetMesh()->GetComponentRotation();
+		AAfterImage* Effect = GetWorld()->SpawnActor<AAfterImage>(Location, RotMesh, param);
+
+		Effect->CopyImage(GetMesh());
+
+		UE_LOG(TestGame, Warning, TEXT("AfterImage Spawn Called"));
+	}
+	else
+		UE_LOG(TestGame, Warning, TEXT("speed does not match to Thresold[%0.3f : %0.3f]"), SpeedThresold, GetVelocity().Size());
+}
+
+void APlayerCharacter::RunSweepConeAndDamage(float Damage, float SphereSize, float SphereDistance, float AngleStartDistance, float InnerAngle, ECollisionChannel TraceChannel, UNiagaraSystem* VFXAsset, bool bSpawnVFXOnHit, USoundBase* SFXAsset, bool bSpawnSFXOnHit)
+{
+	//SphereSize				ìƒì„±í•  êµ¬ì˜ í¬ê¸°
+	//SphereDistance			êµ¬ë¥¼ ìƒì„±í•  ê±°ë¦¬
+	//AngleStartDistance		ê°ë„ë¥¼ ì¬ê¸° ì‹œì‘í•  ê±°ë¦¬
+	//InnerAngle				ì¡°ê±´ìœ¼ë¡œ ê²€ì¶œí•  ê°ë„ (ë‹¨ì¸¡ë©´ì˜ ê°’ì„ ì´ ê°ë„ëŠ” * 2 )
+	//TraceChannel				ì¶©ëŒ ê³„ì‚°í•  ì±„ë„
+	//HitVFX					ì¶©ëŒ ì‹œ ì¬ìƒí•  VFX ì—ì…‹
+	//HitSFX					ì¶©ëŒ ì‹œ ì¬ìƒí•  SFX ì—ì…‹
+	//bSpawnVFXEveryHit	ëª¨ë“  ì¶©ëŒì— VFX ìŠ¤í°
+	//bSpawnSFXEveryHit	ëª¨ë“  ì¶©ëŒì§€ì ì— SFX ìŠ¤í°
+
+	if (VFXAsset && !bSpawnVFXOnHit)
+	{
+		//VFX ì—ì…‹ì„ ì „ë‹¬ë°›ì•˜ê³   ì¶©ëŒì²´ì— ë°œìƒì•ŠìŒì¸ ê²½ìš°  ìºë¦­í„°ì— VFX ë¥¼ 1íšŒ ìŠ¤í°í•œë‹¤
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), VFXAsset, GetMesh()->GetComponentLocation());
+	}
+	if (SFXAsset && !bSpawnSFXOnHit)
+	{
+		//SFX ì—ì…‹ì„ ì „ë‹¬ë°›ì•˜ê³   ì¶©ëŒì²´ì— ë°œìƒì•ŠìŒì¸ ê²½ìš°  ìºë¦­í„°ì— SFX ë¥¼ 1íšŒ ìŠ¤í°í•œë‹¤
+		UGameplayStatics::SpawnSoundAtLocation(GetWorld(), SFXAsset,
+			GetMesh()->GetComponentLocation(), FRotator::ZeroRotator,
+			2.f);
+	}
+
+	// 1. ì¼€ë¦­í„°ì˜ ì „ë°© ë°©í–¥ì„ êµ¬í•˜ê³  ê°ë„ë¥¼ ê³„ì‚°í•  ìœ„ì¹˜ë¥¼ ì¡ì•„ì¤€ë‹¤Reference Point
+	FVector MeshForwardVector = GetMesh()->GetForwardVector();
+	//* ë©”ì‰¬ì˜ Yaw íšŒì „ í‹€ì–´ì§ ë³´ì • 90f
+	FVector AdjustedForward = MeshForwardVector.RotateAngleAxis(90.0f, FVector(0, 0, 1));
+	//
+	FVector ReferencePoint = GetActorLocation() + (AdjustedForward * AngleStartDistance);
+
+	//êµ¬ë¥¼ ìƒì„±í•  ì¤‘ì‹¬ì ì„ ë§Œë“ ë‹¤   =   SpherePoint
+	FVector SpherePoint = GetActorLocation() + (AdjustedForward * (SphereDistance)); // Sweep ì‹œì‘ ìœ„ì¹˜
+	FVector SweepEnd = SpherePoint;
+
+	// 2. ì„¤ì •í•œ ë°˜ê²½(SphereSize) í¬ê¸°ì˜ ìŠ¤í”¼ì–´ Sweep ì„ ì‹¤í–‰í•œë‹¤
+	FCollisionShape SphereShape = FCollisionShape::MakeSphere(SphereSize);
+	TArray<FHitResult> HitResults;
+
+	bool bHit = GetWorld()->SweepMultiByChannel(
+		HitResults,
+		SpherePoint,														//êµ¬ë¥¼ ë§Œë“¤ ì‹œì‘ í¬ì¸íŠ¸
+		SweepEnd,														//ì¢…ë£Œ í¬ì¸íŠ¸ (êµ¬ì²´ì´ë¯€ë¡œ ê°™ì€ê³³ì„ ì§€ì •í•˜ì˜€ë‹¤
+		FQuat::Identity,
+		TraceChannel,		// PlayerWeaponSweep -> íŠ¸ë ˆì´ìŠ¤ ì±„ë„
+		SphereShape														//SphereSize í¬ê¸°ì˜ Sphere ë¡œ ë§Œë“ ë‹¤
+	);
+	if (CVarDebugLines.GetValueOnGameThread() == 1) // ê°’ì´ 1ì´ë©´ ë””ë²„ê·¸ ì¶œë ¥
+	{
+
+	// ìŠ¤í”¼ì–´ ë””ë²„ê·¸ ë“œë¡œì‰ (Sweep ê²€ì‚¬ ë²”ìœ„)
+	float DrawTime = 2.0f;
+	DrawDebugSphere(
+		GetWorld(),
+		SpherePoint,					// êµ¬ì²´ ì¤‘ì‹¬
+		SphereSize,					// ë°˜ì§€ë¦„
+		12,								// ì„¸ê·¸ë¨¼íŠ¸ ìˆ˜ (ë””í…Œì¼ ì •ë„)
+		FColor::Red,					// ìƒ‰ìƒ
+		false,
+		DrawTime 						// ì§€ì† ì‹œê°„
+	);
+
+	// ì „ë°© ê¸°ì¤€ì  ë””ë²„ê·¸ ë“œë¡œì‰
+	DrawDebugPoint(
+		GetWorld(),
+		ReferencePoint,
+		10.0f,							// í¬ê¸°
+		FColor::Blue,
+		false,
+		DrawTime
+	);
+
+	// Cone íŒì • ì˜ì—­ ë””ë²„ê·¸ ë“œë¡œì‰ (ê°ë„ í‘œì‹œ)
+	FVector LeftLimit = AdjustedForward.RotateAngleAxis(-InnerAngle, FVector(0, 0, 1));			// -ê°ë„ ë°©í–¥(ì¢Œì¸¡ê°)
+	FVector RightLimit = AdjustedForward.RotateAngleAxis(InnerAngle, FVector(0, 0, 1));			// +ê°ë„ ë°©í–¥(ìš°ì¸¡ê°)
+		DrawDebugLine(GetWorld(), ReferencePoint, ReferencePoint + LeftLimit * SphereSize, FColor::Green, false, DrawTime);
+		DrawDebugLine(GetWorld(), ReferencePoint, ReferencePoint + RightLimit * SphereSize, FColor::Green, false, DrawTime);
+	}
+	//ìµœì í™” : ì¶©ëŒ ì—†ìœ¼ë©´ ë‚˜ê°€ê¸°
+	if (!bHit)
+		return;
+
+	// 3. ëª¨ë“  ì¶©ëŒì²´ íƒìƒ‰
+	for (const FHitResult& Hit : HitResults)
+	{
+		AActor* HitActor = Hit.GetActor();
+		//ìµœì í™” : ì¶©ëŒ ê°€ëŠ¥í•œ ì—‘í„°ê°€ ì•„ë‹ˆë©´ ê±´ë„ˆë›°ê¸° 
+		if (!HitActor)
+			continue;
+
+		// 4. ê¸°ì¤€ ì§€ì (ReferencePoint)ì—ì„œ ì¶©ëŒì²´ ë°©í–¥ì„ ê³„ì‚° (ì •ê·œí™”ë¡œ ì •í™•ë„ ë³´ì¥)
+		FVector ToHitActor = (HitActor->GetActorLocation() - ReferencePoint).GetSafeNormal();
+		// ë‚´ì êµ¬í•˜ê¸° ForwardVector vs ToHitActor
+		float DotProduct = FVector::DotProduct(AdjustedForward, ToHitActor);
+
+		//ë¹„êµ ë°©ì‹ :  ë‘ ê°’(ë‚´ì  vs ê°ë„) ì„ ë¹„êµê°€ëŠ¥í•˜ë„ë¡ ê°™ì€ ì„±ì§ˆë¡œ ë§Œë“¤ì–´ì•¼ í•œë‹¤
+		// ë°©ì‹ 1. ë¼ë””ì•ˆ DotProduct ì„ ê°ë„ë¡œ ë³€í™˜í•˜ê¸° (ì—­ì½”ì‚¬ì¸)
+		float Angle = FMath::Acos(DotProduct) * (180.0f / PI);
+		// ë°©ì‹ 2. ê°ë„ InnerAngle ì„ ë¼ë””ì•ˆìœ¼ë¡œ ë³€í™˜í•˜ê¸° (ì½”ì‚¬ì¸)
+		//			float TargetRadian = FMath::Cos(FMath::DegreesToRadians(InnerAngle));
+		
+
+		//íŒì • ì¡°ê±´ì— ì˜í•´ ê²€ì¶œëœ ì—‘í„°ì— ëŒ€í•œ êµ¬í˜„ 
+		//ëª©í‘œê°€ cone ëª¨ì–‘ì´ë¯€ë¡œ ìŒìˆ˜ë¥¼ ê±¸ëŸ¬ë‚´ì•¼í–”ë‹¤ (ìŒìˆ˜ëŠ” ì¼€ë¦­í„° ë’·ë°©í–¥ì´ë¯€ë¡œ..)
+		if (Angle <= InnerAngle && Angle >= 0)	
+		{
+			//ëª¬ìŠ¤í„° ë° í•˜ìœ„ í´ë˜ìŠ¤ ì¸ ê²½ìš°ì—ë§Œ ì²˜ë¦¬ ì²˜ë¦¬
+			if (AMonster* Monster = Cast<AMonster>(HitActor))
+			{
+				if (VFXAsset && bSpawnVFXOnHit)
+				{
+					FVector	VFXLocation = Monster->GetMeshComponent()->GetSocketLocation(TEXT("Chest"));
+					if(VFXLocation == FVector::ZeroVector)
+					{
+						//VFX ì—ì…‹ì„ ì „ë‹¬ë°›ê³  ëª¨ë“  íƒ€ê¹ƒì— VFX ìŠ¤í°ì„ ì „ë‹¬ë°›ì€ ê²½ìš°
+						UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), VFXAsset, Hit.ImpactPoint);
+					}
+					else
+					{
+						UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), VFXAsset, VFXLocation);
+					}
+				}
+				if (SFXAsset && bSpawnSFXOnHit)
+				{
+					//SFX ì—ì…‹ì„ ì „ë‹¬ë°›ê³  ëª¨ë“  íƒ€ê¹ƒì— SFX ìŠ¤í°ì„ ì „ë‹¬ë°›ì€ ê²½ìš°
+					UGameplayStatics::SpawnSoundAtLocation(GetWorld(), SFXAsset,
+						Hit.ImpactPoint, FRotator::ZeroRotator,
+						2.f);
+				}
+
+				UE_LOG(TestGame, Warning, TEXT("Actor [%s] has in inside of %0.2f degrees"), *HitActor->GetName(), InnerAngle);
+
+				//ì¶©ëŒ ë°›ì€ ì—‘í„°ì— ë°ë¯¸ì§€ ì£¼ê¸°
+				FDamageEvent	DmgEvent;
+				HitActor->TakeDamage(Damage, DmgEvent, GetController(), this);
+			}
+		}
+	}
+}
+
+void APlayerCharacter::RunSweepConeAndDamage(float Damage, float SphereSize, float SphereDistance, float AngleStartDistance, float InnerAngle, ECollisionChannel TraceChannel, UParticleSystem* VFXAsset, bool bSpawnVFXOnHit, USoundBase* SFXAsset, bool bSpawnSFXOnHit)
+{
+	// VFX ë° SFX ì¬ìƒ  = íŒŒí‹°í´ì‹œìŠ¤í…œ
+	if (VFXAsset && !bSpawnVFXOnHit)
+	{
+		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(),
+			VFXAsset, GetMesh()->GetComponentLocation(),
+			FRotator::ZeroRotator);
+	}
+	if (SFXAsset && !bSpawnSFXOnHit)
+	{
+		UGameplayStatics::SpawnSoundAtLocation(GetWorld(), SFXAsset,
+			GetMesh()->GetComponentLocation(), FRotator::ZeroRotator,
+			2.f);
+	}
+
+	// 1. ì¼€ë¦­í„°ì˜ ì „ë°© ë°©í–¥ì„ êµ¬í•˜ê³  ê°ë„ë¥¼ ê³„ì‚°í•  ìœ„ì¹˜ë¥¼ ì¡ì•„ì¤€ë‹¤Reference Point
+	FVector MeshForwardVector = GetMesh()->GetForwardVector();
+	//* ë©”ì‰¬ì˜ Yaw íšŒì „ í‹€ì–´ì§ ë³´ì • 90f
+	FVector AdjustedForward = MeshForwardVector.RotateAngleAxis(90.0f, FVector(0, 0, 1));
+	FVector ReferencePoint = GetActorLocation() + (AdjustedForward * AngleStartDistance);
+
+	//êµ¬ë¥¼ ìƒì„±í•  ì¤‘ì‹¬ì ì„ ë§Œë“ ë‹¤   =   SpherePoint
+	FVector SpherePoint = GetActorLocation() + (AdjustedForward * (SphereDistance)); // Sweep ì‹œì‘ ìœ„ì¹˜
+	FVector SweepEnd = SpherePoint;
+
+	// 2. ì„¤ì •í•œ ë°˜ê²½(SphereSize) í¬ê¸°ì˜ ìŠ¤í”¼ì–´ Sweep ì„ ì‹¤í–‰í•œë‹¤
+	FCollisionShape SphereShape = FCollisionShape::MakeSphere(SphereSize);
+	TArray<FHitResult> HitResults;
+
+	bool bHit = GetWorld()->SweepMultiByChannel(
+		HitResults,
+		SpherePoint,														//êµ¬ë¥¼ ë§Œë“¤ ì‹œì‘ í¬ì¸íŠ¸
+		SweepEnd,														//ì¢…ë£Œ í¬ì¸íŠ¸ (êµ¬ì²´ì´ë¯€ë¡œ ê°™ì€ê³³ì„ ì§€ì •í•˜ì˜€ë‹¤
+		FQuat::Identity,
+		TraceChannel,													//íŠ¸ë ˆì´ìŠ¤ ì±„ë„
+		SphereShape														//SphereSize í¬ê¸°ì˜ Sphere ë¡œ ë§Œë“ ë‹¤
+	);
+	if (CVarDebugLines.GetValueOnGameThread() == 1) // ê°’ì´ 1ì´ë©´ ë””ë²„ê·¸ ì¶œë ¥
+	{
+
+	// ìŠ¤í”¼ì–´ ë””ë²„ê·¸ ë“œë¡œì‰ (Sweep ê²€ì‚¬ ë²”ìœ„)
+	float DrawTime = 2.0f;
+	DrawDebugSphere(
+		GetWorld(),
+		SpherePoint,					// êµ¬ì²´ ì¤‘ì‹¬
+		SphereSize,					// ë°˜ì§€ë¦„
+		12,								// ì„¸ê·¸ë¨¼íŠ¸ ìˆ˜ (ë””í…Œì¼ ì •ë„)
+		FColor::Red,					// ìƒ‰ìƒ
+		false,
+		DrawTime 						// ì§€ì† ì‹œê°„
+	);
+
+	// ì „ë°© ê¸°ì¤€ì  ë””ë²„ê·¸ ë“œë¡œì‰
+	DrawDebugPoint(
+		GetWorld(),
+		ReferencePoint,
+		10.0f,							// í¬ê¸°
+		FColor::Blue,
+		false,
+		DrawTime
+	);
+
+	// Cone íŒì • ì˜ì—­ ë””ë²„ê·¸ ë“œë¡œì‰ (ê°ë„ í‘œì‹œ)
+	FVector LeftLimit = AdjustedForward.RotateAngleAxis(-InnerAngle, FVector(0, 0, 1));			// -ê°ë„ ë°©í–¥(ì¢Œì¸¡ê°)
+	FVector RightLimit = AdjustedForward.RotateAngleAxis(InnerAngle, FVector(0, 0, 1));			// +ê°ë„ ë°©í–¥(ìš°ì¸¡ê°)
+		DrawDebugLine(GetWorld(), ReferencePoint, ReferencePoint + LeftLimit * SphereSize, FColor::Green, false, DrawTime);
+		DrawDebugLine(GetWorld(), ReferencePoint, ReferencePoint + RightLimit * SphereSize, FColor::Green, false, DrawTime);
+	}
+	//ìµœì í™” : ì¶©ëŒ ì—†ìœ¼ë©´ ë‚˜ê°€ê¸°
+	if (!bHit)
+		return;
+
+	// 3. ëª¨ë“  ì¶©ëŒì²´ íƒìƒ‰
+	for (const FHitResult& Hit : HitResults)
+	{
+		AActor* HitActor = Hit.GetActor();
+		//ìµœì í™” : ì¶©ëŒ ê°€ëŠ¥í•œ ì—‘í„°ê°€ ì•„ë‹ˆë©´ ê±´ë„ˆë›°ê¸° 
+		if (!HitActor)
+			continue;
+
+		// 4. ê¸°ì¤€ ì§€ì (ReferencePoint)ì—ì„œ ì¶©ëŒì²´ ë°©í–¥ì„ ê³„ì‚° (ì •ê·œí™”ë¡œ ì •í™•ë„ ë³´ì¥)
+		FVector ToHitActor = (HitActor->GetActorLocation() - ReferencePoint).GetSafeNormal();
+		// ë‚´ì êµ¬í•˜ê¸° ForwardVector vs ToHitActor
+		float DotProduct = FVector::DotProduct(AdjustedForward, ToHitActor);
+
+		//ë¹„êµ ë°©ì‹ :  ë‘ ê°’(ë‚´ì  vs ê°ë„) ì„ ë¹„êµê°€ëŠ¥í•˜ë„ë¡ ê°™ì€ ì„±ì§ˆë¡œ ë§Œë“¤ì–´ì•¼ í•œë‹¤
+		// ë°©ì‹ 1. ë¼ë””ì•ˆ DotProduct ì„ ê°ë„ë¡œ ë³€í™˜í•˜ê¸° (ì—­ì½”ì‚¬ì¸)
+		float Angle = FMath::Acos(DotProduct) * (180.0f / PI);
+		// ë°©ì‹ 2. ê°ë„ InnerAngle ì„ ë¼ë””ì•ˆìœ¼ë¡œ ë³€í™˜í•˜ê¸° (ì½”ì‚¬ì¸)
+		//			float TargetRadian = FMath::Cos(FMath::DegreesToRadians(InnerAngle));
+
+		//íŒì • ì¡°ê±´ì— ì˜í•´ ê²€ì¶œëœ ì—‘í„°ì— ëŒ€í•œ êµ¬í˜„ 
+		//ëª©í‘œê°€ cone ëª¨ì–‘ì´ë¯€ë¡œ ìŒìˆ˜ë¥¼ ê±¸ëŸ¬ë‚´ì•¼í–”ë‹¤ (ìŒìˆ˜ëŠ” ì¼€ë¦­í„° ë’·ë°©í–¥ì´ë¯€ë¡œ..)
+		if (Angle <= InnerAngle && Angle >= 0)
+		{
+			//ëª¬ìŠ¤í„° ë° í•˜ìœ„ í´ë˜ìŠ¤ ì¸ ê²½ìš°ì—ë§Œ ì²˜ë¦¬ ì²˜ë¦¬
+			if (AMonster* Monster = Cast<AMonster>(HitActor))
+			{
+				if (VFXAsset && bSpawnVFXOnHit)
+				{
+					FVector	VFXLocation = Monster->GetMeshComponent()->GetSocketLocation(TEXT("Chest"));
+					if (VFXLocation == FVector::ZeroVector)
+					{
+						//VFX ì—ì…‹ì„ ì „ë‹¬ë°›ê³  ëª¨ë“  íƒ€ê¹ƒì— VFX ìŠ¤í°ì„ ì „ë‹¬ë°›ì€ ê²½ìš°
+						UGameplayStatics::SpawnEmitterAtLocation(GetWorld(),
+							VFXAsset, Hit.ImpactPoint,
+							Hit.ImpactNormal.Rotation());
+					}
+					else
+					{
+						//VFX ì—ì…‹ì„ ì „ë‹¬ë°›ê³  ëª¨ë“  íƒ€ê¹ƒì— VFX ìŠ¤í°ì„ ì „ë‹¬ë°›ì€ ê²½ìš°
+						UGameplayStatics::SpawnEmitterAtLocation(GetWorld(),
+							VFXAsset, VFXLocation,
+							Hit.ImpactNormal.Rotation());
+					}
+					
+				}
+				if (SFXAsset && bSpawnSFXOnHit)
+				{
+					//SFX ì—ì…‹ì„ ì „ë‹¬ë°›ê³  ëª¨ë“  íƒ€ê¹ƒì— SFX ìŠ¤í°ì„ ì „ë‹¬ë°›ì€ ê²½ìš°
+					UGameplayStatics::SpawnSoundAtLocation(GetWorld(), SFXAsset,
+						Hit.ImpactPoint, FRotator::ZeroRotator,
+						2.f);
+				}
+
+				UE_LOG(TestGame, Warning, TEXT("Actor [%s] has in inside of %0.2f degrees"), *HitActor->GetName(), InnerAngle);
+
+				//ì¶©ëŒ ë°›ì€ ì—‘í„°ì— ë°ë¯¸ì§€ ì£¼ê¸°
+				FDamageEvent	DmgEvent;
+				HitActor->TakeDamage(Damage, DmgEvent, GetController(), this);
+			}
+		}
+	}
+}
+
 
 bool APlayerCharacter::IsCharacterImmobilized()
 {
-	//ÇÏ³ª¶óµµ true ¸é ÀÌµ¿ºÒ´É »óÅÂÀÌ´Ù
+	//í•˜ë‚˜ë¼ë„ true ë©´ ì´ë™ë¶ˆëŠ¥ ìƒíƒœì´ë‹¤
 	if (mCharacterState.HasState(mCharacterState.STUNNED) ||
 		mCharacterState.HasState(mCharacterState.IMMOBILIZED) ||
 		mCharacterState.HasState(mCharacterState.LANDING)
@@ -535,7 +1264,7 @@ bool APlayerCharacter::IsCharacterImmobilized()
 
 bool APlayerCharacter::CanCharacterAct()
 {
-		//ÇÏ³ª¶óµµ true ¸é Çàµ¿ºÒ´É »óÅÂÀÌ´Ù
+		//í•˜ë‚˜ë¼ë„ true ë©´ í–‰ë™ë¶ˆëŠ¥ ìƒíƒœì´ë‹¤
 		if (mCharacterState.HasState(mCharacterState.ACTING)	||
 			mCharacterState.HasState(mCharacterState.STUNNED) ||
 			mCharacterState.HasState(mCharacterState.LANDING)
@@ -544,11 +1273,6 @@ bool APlayerCharacter::CanCharacterAct()
 			return false;
 		}
 		return true;
-}
-
-FCharacterState* APlayerCharacter::GetCharacterState()
-{
-	return &mCharacterState;
 }
 
 // Called every frame
@@ -563,20 +1287,20 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	//ÀÎÀÚÀÇ PlayerInputComponent ´Â 
-	// APlayerController Å¬·¡½ºÀÇ InputComponent* ÀÌ´Ù
-	// ÀÌ ÄÄÆ÷³ÍÆ®¸¦ Çâ»óµÈÀÔ·ÂÄÄÆ÷³ÍÆ®* ·Î Ä³½ºÆÃÇÑ °´Ã¼¸¦ »ı¼ºÇÑ´Ù.
+	//ì¸ìì˜ PlayerInputComponent ëŠ” 
+	// APlayerController í´ë˜ìŠ¤ì˜ InputComponent* ì´ë‹¤
+	// ì´ ì»´í¬ë„ŒíŠ¸ë¥¼ í–¥ìƒëœì…ë ¥ì»´í¬ë„ŒíŠ¸* ë¡œ ìºìŠ¤íŒ…í•œ ê°ì²´ë¥¼ ìƒì„±í•œë‹¤.
 	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent);
 
-	//Ä³½ºÆÃ¿¡ ¼º°ø½Ã
+	//ìºìŠ¤íŒ…ì— ì„±ê³µì‹œ
 	if (IsValid(EnhancedInputComponent))
 	{
-		//CDO ¿¡¼­ APlayerControllerTestGame À» °¡Á®¿Â´Ù
+		//CDO ì—ì„œ APlayerControllerTestGame ì„ ê°€ì ¸ì˜¨ë‹¤
 		const APlayerControllerTestGame* APCTestGameCDO = GetDefault<APlayerControllerTestGame>();
 
-		//IA_Move ÀÔ·Â¾×¼Ç ¿¡¼ÂÀ¸·Î ÇÔ¼ö¸¦ ¹ÙÀÎµùÇÑ´Ù 
-		// ÀÌº¥Æ®´Â Triggered Çü½ÄÀ¸·Î È£ÃâÇÑ´Ù.
-		//		--> ÇÃ·¹ÀÌ¾îÄ³¸¯ÅÍÀÇ ¸â¹öÇÔ¼ö OnIAMoveTriggered À» ¹ÙÀÎµùÇß´Ù
+		//IA_Move ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Triggered í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤.
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAMoveTriggered ì„ ë°”ì¸ë”©í–ˆë‹¤
 		EnhancedInputComponent->
 			BindAction(APCTestGameCDO->
 				mIAMove,
@@ -584,9 +1308,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 				this,
 				&APlayerCharacter::OnIAMoveTriggered);
 
-		//IA_Jump ÀÔ·Â¾×¼Ç ¿¡¼ÂÀ¸·Î ÇÔ¼ö¸¦ ¹ÙÀÎµùÇÑ´Ù 
-		// ÀÌº¥Æ®´Â Started Çü½ÄÀ¸·Î È£ÃâÇÑ´Ù. ´©¸£°í ÀÖ¾îµµ Ã¹ ÀÔ·Â ½Ã¿¡¸¸ È£ÃâÇÑ´Ù
-		//		--> ÇÃ·¹ÀÌ¾îÄ³¸¯ÅÍÀÇ ¸â¹öÇÔ¼ö OnIAJumpStarted À» ¹ÙÀÎµùÇß´Ù
+		//IA_Jump ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAJumpStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
 		EnhancedInputComponent->
 			BindAction(APCTestGameCDO->
 				mIAJump,
@@ -594,9 +1318,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 				this,
 				&APlayerCharacter::OnIAJumpStarted);
 
-		//IA_Attack ÀÔ·Â¾×¼Ç ¿¡¼ÂÀ¸·Î ÇÔ¼ö¸¦ ¹ÙÀÎµùÇÑ´Ù 
-		// ÀÌº¥Æ®´Â Started Çü½ÄÀ¸·Î È£ÃâÇÑ´Ù. ´©¸£°í ÀÖ¾îµµ Ã¹ ÀÔ·Â ½Ã¿¡¸¸ È£ÃâÇÑ´Ù
-		//		--> ÇÃ·¹ÀÌ¾îÄ³¸¯ÅÍÀÇ ¸â¹öÇÔ¼ö OnIAAttackStarted À» ¹ÙÀÎµùÇß´Ù
+		//IA_Attack ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
 		EnhancedInputComponent->
 			BindAction(APCTestGameCDO->
 				mIAAttack,
@@ -604,9 +1328,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 				this,
 				&APlayerCharacter::OnIAAttackStarted);
 
-		//IA_Attack ÀÔ·Â¾×¼Ç ¿¡¼ÂÀ¸·Î ÇÔ¼ö¸¦ ¹ÙÀÎµùÇÑ´Ù 
-		// ÀÌº¥Æ®´Â Triggered Çü½ÄÀ¸·Î È£ÃâÇÑ´Ù.
-		//		--> ÇÃ·¹ÀÌ¾îÄ³¸¯ÅÍÀÇ ¸â¹öÇÔ¼ö OnIAAttackTriggered À» ¹ÙÀÎµùÇß´Ù
+		//IA_Attack ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Triggered í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤.
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackTriggered ì„ ë°”ì¸ë”©í–ˆë‹¤
 		EnhancedInputComponent->
 			BindAction(APCTestGameCDO->
 				mIAAttack,
@@ -614,16 +1338,153 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 				this,
 				&APlayerCharacter::OnIAAttackTriggered);
 
-		//IA_CameraRotate ÀÔ·Â¾×¼Ç ¿¡¼ÂÀ¸·Î ÇÔ¼ö¸¦ ¹ÙÀÎµùÇÑ´Ù 
-		// ÀÌº¥Æ®´Â Triggered Çü½ÄÀ¸·Î È£ÃâÇÑ´Ù.
-		//		--> ÇÃ·¹ÀÌ¾îÄ³¸¯ÅÍÀÇ ¸â¹öÇÔ¼ö OnIACamRotateTriggered À» ¹ÙÀÎµùÇß´Ù
+		//IA_CameraRotate ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Triggered í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤.
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIACamRotateTriggered ì„ ë°”ì¸ë”©í–ˆë‹¤
 		EnhancedInputComponent->
 			BindAction(APCTestGameCDO->
 				mIACameraRotate,
 				ETriggerEvent::Triggered,
 				this,
 				&APlayerCharacter::OnIACamRotateTriggered);
+		
+		//IA_Dash ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+		EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIADash,
+				ETriggerEvent::Started,
+				this,
+				&APlayerCharacter::OnIADashStarted);
+
+		//IA_Sprint ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Triggered ë° Completed ë‘ í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤.
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackTriggered ì„ ë°”ì¸ë”©í–ˆë‹¤
+		EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIASprint,
+				ETriggerEvent::Triggered,
+				this,
+				&APlayerCharacter::OnIASprintTriggered);
+		EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIASprint,
+				ETriggerEvent::Completed,
+				this,
+				&APlayerCharacter::OnIASprintCompleted);
+
+		//IA_Special ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+		EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIASpecial,
+				ETriggerEvent::Started,
+				this,
+				&APlayerCharacter::OnIASpecialStarted);
+
+		//IA_CameraRotate ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Triggered í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤.
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIACamRotateTriggered ì„ ë°”ì¸ë”©í–ˆë‹¤
+		EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIACharacterRotate,
+				ETriggerEvent::Triggered,
+				this,
+				&APlayerCharacter::OnIACharacterRotateTriggered);
+		EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIACharacterRotate,
+				ETriggerEvent::Completed,
+				this,
+				&APlayerCharacter::OnIACharacterRotateCompleted);
+
+		//IA_Cleave ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+		EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIACleave,
+				ETriggerEvent::Started,
+				this,
+				&APlayerCharacter::OnIACleaveStarted);
+
+		//IA_PreviewThanCast ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+		// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+		//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+			EnhancedInputComponent->
+			BindAction(APCTestGameCDO->
+				mIAPreviewThanCast,
+				ETriggerEvent::Started,
+				this,
+				&APlayerCharacter::OnIAPreviewThanCastStarted);
+
+//IA_PreviewThanCast ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+			EnhancedInputComponent->
+				BindAction(APCTestGameCDO->
+					mIAAcceptCastZone,
+					ETriggerEvent::Started,
+					this,
+					&APlayerCharacter::OnIAAcceptCastStarted);
+
+			//IA_PreviewThanCast ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+			EnhancedInputComponent->
+				BindAction(APCTestGameCDO->
+					mIACancelCastZone,
+					ETriggerEvent::Started,
+					this,
+					&APlayerCharacter::OnIACancelCastStarted);
+
+//IA_PreviewThanCast ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+			EnhancedInputComponent->
+				BindAction(APCTestGameCDO->
+					mIAPlayerInfoPanel,
+					ETriggerEvent::Started,
+					this,
+					&APlayerCharacter::OnIAPlayerInfoPanelStarted);
+
+			//IA_SelectCharacter ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+			EnhancedInputComponent->
+				BindAction(APCTestGameCDO->
+					mIASelectCharacter,
+					ETriggerEvent::Started,
+					this,
+					&APlayerCharacter::OnIASelectCharacterStarted);
+
+			//IA_PanelSkill ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+			EnhancedInputComponent->
+				BindAction(APCTestGameCDO->
+					mIAPanelSkill,
+					ETriggerEvent::Started,
+					this,
+					&APlayerCharacter::OnIAPanelSkillStarted);
+
+			//IA_PanelSkill ì…ë ¥ì•¡ì…˜ ì—ì…‹ìœ¼ë¡œ í•¨ìˆ˜ë¥¼ ë°”ì¸ë”©í•œë‹¤ 
+// ì´ë²¤íŠ¸ëŠ” Started í˜•ì‹ìœ¼ë¡œ í˜¸ì¶œí•œë‹¤. ëˆ„ë¥´ê³  ìˆì–´ë„ ì²« ì…ë ¥ ì‹œì—ë§Œ í˜¸ì¶œí•œë‹¤
+//		--> í”Œë ˆì´ì–´ìºë¦­í„°ì˜ ë©¤ë²„í•¨ìˆ˜ OnIAAttackStarted ì„ ë°”ì¸ë”©í–ˆë‹¤
+			EnhancedInputComponent->
+				BindAction(APCTestGameCDO->
+					mIAPanelInv,
+					ETriggerEvent::Started,
+					this,
+					&APlayerCharacter::OnIAPanelInvStarted);
 	}
+}
+
+void APlayerCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
 }
 
 void APlayerCharacter::Landed(const FHitResult& Hit)
@@ -638,30 +1499,30 @@ void APlayerCharacter::Landed(const FHitResult& Hit)
 			mAnimInst->SetPlayerAnim(EPlayerAnim::Landed);
 		}
 
-		//Áß·Â Àı´ñ°ª
+		//ì¤‘ë ¥ ì ˆëŒ“ê°’
 		float GravityAbs = FMath::Abs(GetCharacterMovement()->GetGravityZ());
-		//ÀÌ·Ğ»ó ÃÖ´ë Á¡ÇÁ ³ôÀÌ¸¦ °è»êÇÑ´Ù
+		//ì´ë¡ ìƒ ìµœëŒ€ ì í”„ ë†’ì´ë¥¼ ê³„ì‚°í•œë‹¤
 		float MaxJumpHeight 
 			= (GetCharacterMovement()->JumpZVelocity * GetCharacterMovement()->JumpZVelocity)
 			/ (2 * GravityAbs);
-		//ÀÌ·Ğ»ó ±âº» Á¡ÇÁ½Ã ÂøÁö ¼Óµµ (º¸Á¤°ª 5%Ãß°¡)
+		//ì´ë¡ ìƒ ê¸°ë³¸ ì í”„ì‹œ ì°©ì§€ ì†ë„ (ë³´ì •ê°’ 5%ì¶”ê°€)
 		float MaxLandingSpeed
 			= sqrt(2 * GravityAbs * MaxJumpHeight) * 1.05f;
-		//ÂøÁö ¼Óµµ¸¦ °¡Á®¿Â´Ù (X Y ÀÌµ¿ ¼Óµµ¸¦ ¹èÁ¦ÇÏ±â À§ÇØ Z Ãà¸¸ °è»êÇÑ´Ù
+		//ì°©ì§€ ì†ë„ë¥¼ ê°€ì ¸ì˜¨ë‹¤ (X Y ì´ë™ ì†ë„ë¥¼ ë°°ì œí•˜ê¸° ìœ„í•´ Z ì¶•ë§Œ ê³„ì‚°í•œë‹¤
 		float CurrentVerticalSpeed
 			= FMath::Abs(GetCharacterMovement()->GetLastUpdateVelocity().Z);
 
 
-		//º¸Åë Á¡ÇÁ°¡ ¾Æ´Ñ ÂøÁö¶ó¸é ·»µù ¸ùÅ¸ÁÖ Àç»ı(³ëÆ¼ÆÄÀÌ±îÁö Àá½Ãµ¿¾È ÀÌµ¿°ú Çàµ¿ ºÒ´É Ã³¸®)
+		//ë³´í†µ ì í”„ê°€ ì•„ë‹Œ ì°©ì§€ë¼ë©´ ë Œë”© ëª½íƒ€ì£¼ ì¬ìƒ(ë…¸í‹°íŒŒì´ê¹Œì§€ ì ì‹œë™ì•ˆ ì´ë™ê³¼ í–‰ë™ ë¶ˆëŠ¥ ì²˜ë¦¬)
 		if (CurrentVerticalSpeed > MaxLandingSpeed)
 		{
 			UE_LOG(PlayerLog, Display, TEXT("falling from higher apex than normal jump.\tSpeed %0.2f  > MAX[%0.2f]"), CurrentVerticalSpeed, MaxLandingSpeed);
-			//ÄÉ¸¯ÅÍ »óÅÂ ÇÃ·¡±×¿¡ ÀÌµ¿ºÒ°¡¸¦ ¼³Á¤ÇÑ´Ù (LandEnd ³ëÆ¼ÆÄÀÌ¿¡¼­ ÇØÁ¦ÇÑ´Ù)
+			//ì¼€ë¦­í„° ìƒíƒœ í”Œë˜ê·¸ì— ì´ë™ë¶ˆê°€ë¥¼ ì„¤ì •í•œë‹¤ (LandEnd ë…¸í‹°íŒŒì´ì—ì„œ í•´ì œí•œë‹¤)
 			mCharacterState.SetState(mCharacterState.LANDING);
-			//ÂøÁö Áß °ø°İ ÇàÀ§°¡ ÀÏÀ¸Å°´Â °ø°İ ÇÃ·¡±× ¾ÈÇ®¸² ¹®Á¦ ÇØ°á 
+			//ì°©ì§€ ì¤‘ ê³µê²© í–‰ìœ„ê°€ ì¼ìœ¼í‚¤ëŠ” ê³µê²© í”Œë˜ê·¸ ì•ˆí’€ë¦¼ ë¬¸ì œ í•´ê²° 
 			mCharacterState.SetState(mCharacterState.ACTING);
 			UAnimMontage* LandMontage = mAnimInst->GetLandMontage();
-			//Land¸ùÅ¸ÁÖ Àç»ı
+			//Landëª½íƒ€ì£¼ ì¬ìƒ
 			mAnimInst->Montage_Play(LandMontage);
 		}
 		else
@@ -685,3 +1546,435 @@ void APlayerCharacter::NotifyJumpApex()
 
 	UE_LOG(PlayerLog, Display, TEXT("Player on Apex"));
 }
+
+void APlayerCharacter::ApplyTrailEffect(bool bLeftHand, USkeletalMeshComponent* MeshComp, int32 CurrentTrackIndex)
+{
+	if (!MeshComp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid MeshComp!"));
+		return;
+	}
+
+	// íŠ¸ë ˆì¼ì„ ì ìš©í•  ë³¸ ì†Œì¼“ ê²°ì •
+	FName SelectedSocketName = bLeftHand ? FName("weapon_l_trail_mid") : FName("weapon_r_trail_mid");
+	if (bDebugEnabled)
+	UE_LOG(LogTemp, Warning, TEXT("Selected Socket Name: %s"), *SelectedSocketName.ToString());
+
+	// íŠ¸ë ˆì¼ ê°€ì ¸ì˜¤ê¸° ìºìŠ¤ì¼€ì´ë“œ (ì—†ìœ¼ë©´ ë„)
+	UParticleSystem* ParticleTrail
+		= bLeftHand ? mTrailEffectL.Get() : mTrailEffectR.Get();
+	// íŠ¸ë ˆì¼ ê°€ì ¸ì˜¤ê¸° ë‚˜ì´ì•„ê°€ë¼
+	UNiagaraSystem* NiagaraTrail = bLeftHand ? mTrailEffectNiagaraL.Get() : mTrailEffectNiagaraR.Get();
+
+	// íŠ¸ë ˆì¼ ì ìš© ëª¨ë“œ í™•ì¸
+	if (GetTrailAssetMode() == ETrailAssetMode::NIAGARASYSTEM && NiagaraTrail)
+	{
+		//ë‚˜ì´ì•„ê°€ë¼ ì´í™íŠ¸ ìŠ¤í°
+		UNiagaraComponent* TrailComponent 
+			= UNiagaraFunctionLibrary::SpawnSystemAttached(
+				NiagaraTrail, 
+				MeshComp, 
+				SelectedSocketName,
+			FVector::ZeroVector, 
+				FRotator::ZeroRotator, 
+				EAttachLocation::KeepRelativeOffset, true);
+		//ì–´ë–¤ íŠ¸ë™ì—ì„œ ë…¸í‹°íŒŒì´ ì´ë²¤íŠ¸ê°€ ë‚˜ì˜¨ê±´ì§€ ê¸°ì–µí•´ë‘ê¸° ìœ„í•´ íƒœê·¸ë¥¼ ì¶”ê°€í•œë‹¤
+		TrailComponent->ComponentTags.Add(FName(*FString::FromInt(CurrentTrackIndex)));
+
+		if (TrailComponent)
+		{
+			TrailComponent->SetFloatParameter(TEXT("TrailDuration"), 2.0f);  // ì§€ì†ì‹œê°„ ì˜ˆì œ
+		}
+		if (bDebugEnabled)
+		UE_LOG(TestGame, Warning, TEXT("Niagara particle spawned"));
+	}
+	else if (GetTrailAssetMode() == ETrailAssetMode::PARTICLESYSTEM && ParticleTrail)
+	{
+		//ì´ë¯¸í„° ìŠ¤í°
+		UParticleSystemComponent* TrailComponent 
+			= UGameplayStatics::SpawnEmitterAttached(
+				ParticleTrail, 
+				MeshComp, 
+				SelectedSocketName, 
+				FVector::ZeroVector, 
+				FRotator::ZeroRotator, 
+				EAttachLocation::KeepRelativeOffset);
+		
+		//ì–´ë–¤ íŠ¸ë™ì—ì„œ ë…¸í‹°íŒŒì´ ì´ë²¤íŠ¸ê°€ ë‚˜ì˜¨ê±´ì§€ ê¸°ì–µí•´ë‘ê¸° ìœ„í•´ íƒœê·¸ë¥¼ ì¶”ê°€í•œë‹¤
+		TrailComponent->ComponentTags.Add(FName(*FString::FromInt(CurrentTrackIndex)));
+
+		if (TrailComponent)
+		{
+			TrailComponent->SetFloatParameter(TEXT("TrailDuration"), 2.0f);
+		}
+		if (bDebugEnabled)
+		UE_LOG(TestGame, Warning, TEXT("Particlesystem particle spawned"));
+	}
+}
+
+void APlayerCharacter::OnWeaponOverlap(
+	UPrimitiveComponent* OverlappedComponent, 
+	AActor* OtherActor, 
+	UPrimitiveComponent* OtherComp, 
+	int32 OtherBodyIndex, 
+	bool bFromSweep, 
+	const FHitResult& SweepResult)
+{
+	//ì˜¤ë²„ë ™ìœ¼ë¡œ ì²˜ë¦¬í•˜ê²Œë” í–ˆì„ ê²½ìš°ì—ë§Œ ê³„ì‚°í•œë‹¤
+	if (!bNormalAttackOverlap)
+		return;
+
+	UE_LOG(TestGame, Display, TEXT("OnWeaponOverlap entered"));
+	////ë””ë²„ê·¸ ë°•ìŠ¤ ê·¸ë¦¬ê¸°
+	//if (bFromSweep) // ìŠ¤ìœ• ì¶©ëŒì´ ë°œìƒí–ˆì„ ë•Œë§Œ ì‹¤í–‰
+	//{
+		//// ë””ë²„ê·¸ ë°•ìŠ¤ì˜ ìƒ‰ìƒ ë° ë‘ê»˜ ì„¤ì •
+		//FColor DebugColor = FColor::Red;
+		//float DebugThickness = 2.0f;
+
+		//// ì¶©ëŒ ì§€ì  ê¸°ì¤€ìœ¼ë¡œ ë°•ìŠ¤ ê·¸ë¦¬ê¸°
+		//DrawDebugBox(
+		//	GetWorld(),
+		//	SweepResult.Location,			// ì¶©ëŒ ë°œìƒ ìœ„ì¹˜ì— ê·¸ë¦°ë‹¤
+		//	FVector(10.f, 10.f, 10.f),		// ë°•ìŠ¤ í¬ê¸°
+		//	DebugColor,							// ìƒ‰ìƒ
+		//	false,									// 
+		//	2.0f,										// í‘œì‹œ ì‹œê°„ (ì´ˆ)
+		//	0,
+		//	DebugThickness // ì„  ë‘ê»˜
+		//);
+		//UE_LOG(LogTemp, Warning, TEXT("Collision at: %s"), *SweepResult.Location.ToString());
+	/*UE_LOG(TestGame, Warning, TEXT("APlayerCharacter: Weapon Overlap Called, bFromSweep : %s, HitPoint : %s"), bFromSweep ? TEXT("true") : TEXT("false"), *SweepResult.ImpactPoint.ToString());*/
+	//}
+
+		//ì„ì‹œ ì¶©ëŒì²´ë¥¼ ë§Œë“¤ì–´ (Sweep - By )   ì¶©ëŒ ìœ„ì¹˜ë¥¼ ì–»ëŠ” ì²˜ë¦¬ì´ë‹¤
+		//ë§¤í”„ë ˆì„ ì´ ì—°ì‚°ì„ í•˜ì§€ì•Šê³   ì˜¤ë²„ë ™ ì•ˆì—ì„œë§Œ ì¶”ê°€ ì²˜ë¦¬ë¥¼ í•˜ëŠ”ê²Œ íš¨ìœ¨ì ì´ë‹¤
+		//ì™œëƒí•˜ë©´ ë¬´ê¸°ì˜ í˜•íƒœì— ìœ ì‚¬í•˜ê²Œ ë§Œë“¤ì–´ë‚¸ ì¶©ëŒì²´ë¡œë¶€í„° ì˜¤ë²„ë©ì´ ë°œìƒí•˜ëŠ” ê²ƒë§Œìœ¼ë¡œë„ ìœ íš¨í•œ ì¶©ëŒì´ ë°œìƒí–ˆìŒì„ ê°ì§€í•œ ê²ƒì´ê¸° ë•Œë¬¸ì— ë§¤í”„ë ˆì„ sweep ì„ ê²€ì¶œí•  ì´ìœ ê°€ ì—†ë‹¤ 
+		// 
+		// 
+		//ë©”ì‰¬ì—ì„œ ë¬´ê¸°ì˜ ì‹œì‘ ë˜ëŠ” ë ìœ„ì¹˜ì— ì†Œì¼“ì„ ìƒì„±í•˜ê³   
+		//ê·¸ ì§€ì ìœ¼ë¡œë¶€í„° ì¶©ëŒì„ ê³„ì‚°í•˜ê¸°ìœ„í•œ ì„ ì„ ê·¸ë ¤ë‚¸ë‹¤ ë¬´ê¸°ì˜ ê¸¸ì´ì™€ íšŒì „ ë°©í–¥ì— ì¼ì¹˜í•˜ëŠ” ê±°ë¦¬ë¡œ ë§Œë“¤ì–´ì•¼ í•œë‹¤
+	FVector SweepStartPoint, SweepEndPoint, BoxExtent;
+
+	//ìŒìˆ˜ì¸ì§€ ê²€ì‚¬
+	if (mWeaponColBox.Num() > 0)
+	{
+		int32 Count = mWeaponColBox.Num();
+		//ìŒìˆ˜ì¸ê²½ìš° í˜„ì¬ ì˜¤ë²„ë ™ì´ ì–´ë–¤ì†ê³¼ ì¶©ëŒí–ˆëŠ”ì§€ êµ¬ë¶„í•˜ì—¬ Start ì™€ End ì˜ ëŒ€ìƒì†Œì¼“ì„ êµ¬í•œë‹¤
+		if (Count >= 2)
+		{
+			for (int32 i = 0; i < Count; ++i)
+			{
+				if (mWeaponColBox[i] == OverlappedComponent)
+				{
+					SweepStartPoint = (i == 0) ? GetMesh()->GetSocketLocation(TEXT("weapon_r_sweep_start")) :
+						GetMesh()->GetSocketLocation(TEXT("weapon_l_sweep_start"));
+					SweepEndPoint = (i == 0) ? GetMesh()->GetSocketLocation(TEXT("weapon_r_sweep_end")) :
+						GetMesh()->GetSocketLocation(TEXT("weapon_l_sweep_end"));
+					//6 ë²ˆì¸ì ë°›ê¸° 
+					BoxExtent = mWeaponColBox[i]->GetUnscaledBoxExtent();
+				}
+			}
+		}
+		else if (Count < 2)
+		{
+			//ë¬´ê¸°ê°€ í•˜ë‚˜ì¸ ê²½ìš° 
+			SweepStartPoint = GetMesh()->GetSocketLocation(TEXT("weapon_sweep_start"));
+			SweepEndPoint = GetMesh()->GetSocketLocation(TEXT("weapon_sweep_end"));
+			BoxExtent = mWeaponColBox[0]->GetUnscaledBoxExtent();
+		}
+	}
+	else
+	{
+		UE_LOG(TestGame, Warning, TEXT("No Collision box exists in this actor"));
+		return;
+	}
+
+	// ì‹œì‘ì ì—ì„œ ëì ìœ¼ë¡œ í–¥í•˜ëŠ” ë°©í–¥ì„ ë§Œë“ ë‹¤ -> GetSafeNormal ë¡œ í‘œì¤€í™”
+	FVector Direction = (SweepEndPoint - SweepStartPoint).GetSafeNormal();
+	//í•´ë‹¹ë°©í–¥ìœ¼ë¡œ íšŒì „í•˜ëŠ” ë°©í–¥ì„ ë§Œë“¤ì–´ë‚¸ë‹¤
+	FRotator RotDirection = Direction.Rotation();
+	//ì¿¼í„°ë‹ˆì–¸íšŒì „ìœ¼ë¡œ ë§Œë“ ë‹¤ (sweep ì—ì„œ ìš”êµ¬í•˜ëŠ” ê²ƒì€ ì¿¼í„°ë‹ˆì–¸ íšŒì „ì´ë‹¤)
+	FQuat RotQuat = RotDirection.Quaternion();
+
+	//7ë²ˆ ì¸ì param ìƒì„±
+	FCollisionQueryParams	param(NAME_None, false, this);
+	//param.AddIgnoreXXXX  ë¡œ ì œì™¸ëª©ë¡ ì¶”ê°€
+
+	FHitResult		Hit;
+	bool Collided = GetWorld()->SweepSingleByChannel(
+		Hit,																	// ì¶©ëŒ ê°ì²´ë¥¼ ì „ë‹¬ë°›ì„ ê°ì²´
+		SweepStartPoint,												// ê³„ì‚° ì‹œì‘ ì§€ì 
+		SweepEndPoint,													// ê³„ì‚° ì¢…ë£Œ ì§€ì 
+		RotQuat,															// ì‹œì‘ì—ì„œ ì¢…ë£Œì§€ì ì„ í–¥í•˜ëŠ” ì¿¼í„°ë‹ˆì–¸ íšŒì „ê°’ 
+		ECollisionChannel::ECC_GameTraceChannel7,		//ì¶©ëŒì„ ê³„ì‚°í•  ì±„ë„
+		FCollisionShape::MakeBox(BoxExtent),				//ì¶©ëŒì²´ì˜ ëª¨ì–‘
+		param);																//ì¶”ê°€ ì œì™¸ëª©ë¡
+
+	if (Collided)
+	{
+		if (CVarDebugLines.GetValueOnGameThread() == 1) // ê°’ì´ 1ì´ë©´ ë””ë²„ê·¸ ì¶œë ¥
+		{
+
+		// ë””ë²„ê·¸ ë°•ìŠ¤ì˜ ìƒ‰ìƒ ë° ë‘ê»˜ ì„¤ì •
+		FColor DebugColor = FColor::Red;
+		float DebugThickness = 2.0f;
+
+			// ì¶©ëŒ ì§€ì  ê¸°ì¤€ìœ¼ë¡œ ë°•ìŠ¤ ê·¸ë¦¬ê¸°
+			DrawDebugBox(
+				GetWorld(),
+				Hit.ImpactPoint,			// ì¶©ëŒ ë°œìƒ ìœ„ì¹˜ì— ê·¸ë¦°ë‹¤
+				FVector(10.f, 10.f, 10.f),		// ë°•ìŠ¤ í¬ê¸°
+				DebugColor,							// ìƒ‰ìƒ
+				false,									// 
+				3.0f,										// í‘œì‹œ ì‹œê°„ (ì´ˆ)
+				0,
+				DebugThickness // ì„  ë‘ê»˜
+			);
+		}
+		UE_LOG(LogTemp, Warning, TEXT("Collision at: %s"), *Hit.ImpactPoint.ToString());
+
+		//íŒŒí‹°í´ ìƒì„± : ë™ê¸°í™”ë°©ì‹ ëŸ°íƒ€ì„ ë¡œë“œ  
+		UParticleSystem* HitParticle = LoadObject<UParticleSystem>(
+			GetWorld(),
+			TEXT("/Script/Engine.ParticleSystem'/Game/ParagonCountess/FX/Particles/Abilities/Primary/FX/p_CountessImpact.p_CountessImpact'"));
+
+		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(),
+			HitParticle, Hit.ImpactPoint,
+			Hit.ImpactNormal.Rotation());
+
+		//ì‚¬ìš´ë“œìƒì„± : ë™ê¸°ë°©ì‹- ëŸ°íƒ€ì„ ë¡œë“œ
+		USoundBase* HitSound = LoadObject<USoundBase>(
+			GetWorld(),
+			TEXT("/Script/Engine.SoundWave'/Game/Sounds/sfx/sfx_whipped01.sfx_whipped01'"));
+
+		UGameplayStatics::SpawnSoundAtLocation(GetWorld(), HitSound,
+			Hit.ImpactPoint, FRotator::ZeroRotator,
+			2.f);
+	}
+}
+
+void APlayerCharacter::OnWeaponHit(
+	UPrimitiveComponent* HitComponent, 
+	AActor* OtherActor, 
+	UPrimitiveComponent* OtherComp, 
+	FVector NormalImpulse, 
+	const FHitResult& HitResult)
+{
+	if (CVarDebugLines.GetValueOnGameThread() == 1) // ê°’ì´ 1ì´ë©´ ë””ë²„ê·¸ ì¶œë ¥
+	{
+
+		//ë””ë²„ê·¸ ë°•ìŠ¤ ê·¸ë¦¬ê¸°
+		// ë””ë²„ê·¸ ë°•ìŠ¤ì˜ ìƒ‰ìƒ ë° ë‘ê»˜ ì„¤ì •
+		FColor DebugColor = FColor::Red;
+		float DebugThickness = 2.0f;
+
+		// ì¶©ëŒ ì§€ì  ê¸°ì¤€ìœ¼ë¡œ ë°•ìŠ¤ ê·¸ë¦¬ê¸°
+		DrawDebugBox(
+			GetWorld(),
+			HitResult.Location,			// ì¶©ëŒ ë°œìƒ ìœ„ì¹˜ì— ê·¸ë¦°ë‹¤
+			FVector(10.f, 10.f, 10.f),		// ë°•ìŠ¤ í¬ê¸°
+			DebugColor,							// ìƒ‰ìƒ
+			false,									// 
+			2.0f,										// í‘œì‹œ ì‹œê°„ (ì´ˆ)
+			0,
+			DebugThickness // ì„  ë‘ê»˜
+		);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("Collision at: %s"), *HitResult.Location.ToString());
+
+	UE_LOG(TestGame, Warning, TEXT("APlayerCharacter: Weapon Overlap Called, HitPoint : %s"),  *HitResult.ImpactPoint.ToString());
+}
+
+float APlayerCharacter::TakeDamage(float DamageAmount,
+	struct FDamageEvent const& DamageEvent,
+	class AController* EventInstigator, AActor* DamageCauser)
+{
+	DamageAmount = Super::TakeDamage(DamageAmount, DamageEvent,
+		EventInstigator, DamageCauser);
+
+	if (DamageAmount > 0.f)
+	{
+		float	Dmg = DamageAmount - mDefense;
+		Dmg = Dmg < 1.f ? 1.f : Dmg;
+
+		Damage(Dmg);
+
+		//HUD ì— ë°›ì€ í”¼í•´ëŸ‰ì„ ë°˜ì˜í•´ì¤€ë‹¤
+			//1. ì‹±ê¸€í„´ ë§¤ë‹ˆì €ë¡œë¶€í„° í•´ë‹¹ HUD ìœ„ì ¯ì˜ ì£¼ì†Œë¥¼ ê°€ì ¸ì˜¨ë‹¤ 
+		UPlayerStatusHUDWidget* HUDWidget = CWidgetManager::GetInst()->FindWidget<UPlayerStatusHUDWidget>(TEXT("PlayerStatusHUDWidget"));
+		if (HUDWidget)
+		{
+			HUDWidget->SetHPBar(mHP, mHPMax);  //HP ë°”ë¥¼ ì§€ê¸ˆ í´ë˜ìŠ¤ì˜ ê°’ìœ¼ë¡œ ì—…ë°ì´íŠ¸
+		}
+	}
+
+	// ë°ë¯¸ì§€ ì²˜ë¦¬
+	UE_LOG(TestGame, Warning, TEXT("Damage : %.5f"), DamageAmount);
+
+	return DamageAmount;
+}
+
+void APlayerCharacter::SetGenericTeamId(
+	const FGenericTeamId& TeamID)
+{
+	mTeamID = TeamID;
+}
+
+FGenericTeamId APlayerCharacter::GetGenericTeamId() const
+{
+	return mTeamID;
+}
+
+ETeamAttitude::Type APlayerCharacter::GetTeamAttitudeTowards(
+	const AActor& Other) const
+{
+	const IGenericTeamAgentInterface* OtherTeamAgent =
+		Cast<const IGenericTeamAgentInterface>(&Other);
+
+	if (!OtherTeamAgent)
+		return ETeamAttitude::Neutral;
+
+	else if (OtherTeamAgent->GetGenericTeamId().GetId() == TeamNeutral)
+		return ETeamAttitude::Neutral;
+
+	return GetGenericTeamId() == OtherTeamAgent->GetGenericTeamId() ?
+		ETeamAttitude::Friendly : ETeamAttitude::Hostile;
+}
+
+void APlayerCharacter::EnableOutLine(bool Enable)
+{
+	int32 Stencil = GetMesh()->CustomDepthStencilValue;
+
+	// ìŠ¤í…ì‹¤ ì¼œê¸°ë¡œ í˜¸ì¶œ ë˜ì—ˆì„ ë•Œ
+	if (Enable)
+	{
+		Stencil |= 1;
+	}
+	else
+	{
+		Stencil ^= 1;
+	}
+	//ë©”ì‰¬ì˜ ìŠ¤í…ì‹¤ ëìŠ¤ì— ê°’ ì ìš©
+	GetMesh()->SetCustomDepthStencilValue(Stencil);
+}
+
+void APlayerCharacter::EnableOcclusion(bool Enable)
+{
+	int32 Stencil = GetMesh()->CustomDepthStencilValue;
+
+	// ìŠ¤í…ì‹¤ ì¼œê¸°ë¡œ í˜¸ì¶œ ë˜ì—ˆì„ ë•Œ
+	if (Enable)
+	{
+		Stencil |= 2;
+	}
+	else
+	{
+		Stencil ^= 2;
+	}
+	//ë©”ì‰¬ì˜ ìŠ¤í…ì‹¤ ëìŠ¤ì— ê°’ ì ìš©
+	GetMesh()->SetCustomDepthStencilValue(Stencil);
+}
+
+void APlayerCharacter::UpdateHPBar()
+{
+	//HUD ì— ì‚¬ìš©í•œ ë§ˆë‚˜ë¥¼ ë°˜ì˜í•œë‹¤
+	//1. ì‹±ê¸€í„´ ë§¤ë‹ˆì €ë¡œë¶€í„° í•´ë‹¹ HUD ìœ„ì ¯ì˜ ì£¼ì†Œë¥¼ ê°€ì ¸ì˜¨ë‹¤ 
+	UPlayerStatusHUDWidget* HUDWidget = CWidgetManager::GetInst()->FindWidget<UPlayerStatusHUDWidget>(TEXT("PlayerStatusHUDWidget"));
+	if (HUDWidget)
+	{
+		HUDWidget->SetHPBar(mHP, mHPMax);  //HP ë°”ë¥¼ ì—…ë°ì´íŠ¸
+	}
+}
+
+void APlayerCharacter::UpdateMPBar()
+{
+	//HUD ì— ì‚¬ìš©í•œ ë§ˆë‚˜ë¥¼ ë°˜ì˜í•œë‹¤
+	//1. ì‹±ê¸€í„´ ë§¤ë‹ˆì €ë¡œë¶€í„° í•´ë‹¹ HUD ìœ„ì ¯ì˜ ì£¼ì†Œë¥¼ ê°€ì ¸ì˜¨ë‹¤ 
+	UPlayerStatusHUDWidget* HUDWidget = CWidgetManager::GetInst()->FindWidget<UPlayerStatusHUDWidget>(TEXT("PlayerStatusHUDWidget"));
+	if (HUDWidget)
+	{
+		HUDWidget->SetMPBar(mMP, mMPMax);  //MP ë°”ë¥¼ ì—…ë°ì´íŠ¸
+	}
+}
+
+void APlayerCharacter::OnGetExp(int32 AddNumber)
+{
+
+	AddExp(AddNumber);
+
+	//í˜„ì¬ ê²½í—˜ì¹˜ ë°›ì•„ì˜¤ê¸° 
+	int32 CurrentExp = GetExp();
+	//exp ë°ì´í„° í…Œì´ë¸” ì–»ì–´ì˜¤ê¸°
+	const UPlayerData* PlayerData =
+		GetDefault<UPlayerData>();
+
+	if (PlayerData)
+	{
+		//ë‹¤ìŒë ˆë²¨ì˜ ê²½í—˜ì¹˜ êµ¬ì„± ì •ë³´ ê°€ì ¸ì˜´
+		FLevelExpRow* ExpInfo = PlayerData->FindExpInfo(FName(*FString::FromInt(mLevel + 1)));
+
+		if (ExpInfo)
+		{
+			//í˜„ì¬ ëˆ„ì  ê²½í—˜ì¹˜ê°€ ë‹¤ìŒë ˆë²¨ ê²½í—˜ì¹˜ì™€ ê°™ê±°ë‚˜ ë†’ìœ¼ë©´ ë ˆë²¨ì—… ì²˜ë¦¬
+			if (CurrentExp >= ExpInfo->TotalExp)
+				LevelUp();
+
+			//HUD ì— ê²½í—˜ì¹˜ ê°’ ë°˜ì˜ì‹œí‚¤ê¸°
+				UPlayerStatusHUDWidget* HUDWidget = CWidgetManager::GetInst()->FindWidget<UPlayerStatusHUDWidget>(TEXT("PlayerStatusHUDWidget"));
+			if (HUDWidget)
+			{
+				//í”„ë¡œê·¸ë ˆì…˜ -> í˜„ì¬ëˆ„ì ê²½í—˜ì¹˜-ì´ì „ë ˆë²¨ìµœëŒ€ê²½í—˜ì¹˜  vs  ë‹¤ìŒë ˆë²¨ê²½í—˜ì¹˜
+				//ì´ì „ë ˆë²¨ ìµœëŒ€ê²½í—˜ì¹˜ = ë‹¤ìŒë ˆë²¨ì‹œì‘ê²½í—˜ì¹˜ - ë‹¤ìŒë ˆë²¨ê¹Œì§€í•„ìš”ê²½í—˜ì¹˜
+				int32 PrevLevelMaxExp = ExpInfo->TotalExp - ExpInfo->RequiredExp;
+				int32 AdjustedExp = mExp - PrevLevelMaxExp;
+	
+				HUDWidget->SetXPBar(AdjustedExp, ExpInfo->RequiredExp);
+			}
+		}
+	}
+}
+
+void APlayerCharacter::LevelUp()
+{
+	AddLevel(1);
+	//ë ˆë²¨ì—…ì‹œ íš¨ê³¼ êµ¬í˜„
+	//ë ˆë²¨ì—… ë³´ë„ˆìŠ¤ëŠ” ì•„ì§ ë¯¸ì„¤ê³„
+
+	//ì´í™íŠ¸ ì²˜ë¦¬ 
+	///Script/Engine.ParticleSystem'/Game/ParagonMinions/FX/Particles/SharedGameplay/States/LevelUp/P_LevelUp.P_LevelUp'
+	UParticleSystem* LvlUpVFX= LoadObject<UParticleSystem>(
+		GetWorld(),
+		TEXT("Script/Engine.ParticleSystem'/Game/ParagonMinions/FX/Particles/SharedGameplay/States/LevelUp/P_LevelUp.P_LevelUp'"));
+
+	UGameplayStatics::SpawnEmitterAtLocation(GetWorld(),
+		LvlUpVFX,
+		GetMesh()->GetComponentLocation(),
+		FRotator::ZeroRotator);
+
+	//ì‚¬ìš´ë“œì²˜ë¦¬
+	///Script/Engine.SoundWave'/Game/Sounds/sfx/piglevelwin2mp3-14800.piglevelwin2mp3-14800'
+
+	//ì‚¬ìš´ë“œìƒì„± : ë™ê¸°í™”ë°©ì‹- ëŸ°íƒ€ì„ ë¡œë“œ
+	USoundBase* LvlUpSFX = LoadObject<USoundBase>(
+		GetWorld(),
+		TEXT("Script/Engine.SoundWave'/Game/Sounds/sfx/piglevelwin2mp3-14800.piglevelwin2mp3-14800'"));
+
+	UGameplayStatics::SpawnSoundAtLocation(GetWorld(), LvlUpSFX,
+		GetMesh()->GetComponentLocation(), FRotator::ZeroRotator,
+		1.f);
+}
+
+void APlayerCharacter::GenerateRandomInvItem()
+{
+	UItemDataCacheManager* DataManager = UItemDataCacheManager::GetInst();
+	if (DataManager)
+	{
+		//ì•„ì´í…œ ëœë¤ìœ¼ë¡œ í•˜ë‚˜ ê³ ë¥´ê¸° 
+		FName RandomItemNamePicked = DataManager->GetRandomItemRowName();
+
+		//ì•„ì´í…œ ìƒì„±
+		mInventoryItemsComponent->AddItem(RandomItemNamePicked);
+	}
+}
+

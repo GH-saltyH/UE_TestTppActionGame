@@ -1,20 +1,36 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
 #include "../GameInfo.h"
-#include "GameFramework/Character.h"
-#include "../Actor/ATestProjectile.h"
-#include "EnhancedInputSubsystems.h"		//Çâ»óµÈ ÀÔ·Â½Ã½ºÅÛÀ» À§ÇØ ÇÊ¿ä
-#include "EnhancedInputComponent.h"		//BindAxis BindAction µîÀ» À§ÇØ ÇÊ¿äÇÏ´Ù
+#include "InputActionValue.h"
 #include "../PlayerController/PlayerControllerTestGame.h"
+#include "../Interface/CharacterPublicInterface.h"
+#include "../Interface/CharacterRenderingInterface.h"
+#include "../Effects/AfterImage.h"
+#include "../Actor/ATestProjectile.h"
+#include "InventoryComponent.h"
+#include "QuestComponent.h"
+
+#include "GameFramework/Character.h"
 #include "PlayerCharacter.generated.h"
 
-//ÇÃ·¹ÀÌ¾îÄ³¸¯ÅÍ °ü·Ã ·Î±×¼³Á¤
+//í”Œë ˆì´ì–´ìºë¦­í„° ê´€ë ¨ ë¡œê·¸ì„¤ì •
 DECLARE_LOG_CATEGORY_EXTERN(PlayerLog, Log, All);
 
-UCLASS()	//Blueprintable = ºí·ç ÇÁ¸°Æ®¿¡¼­ È®Àå °¡´É
-class PRACTICEGAME_API APlayerCharacter : public ACharacter
+UENUM(BlueprintType)
+enum class ETrailAssetMode : uint8
+{
+	NIAGARASYSTEM,
+	PARTICLESYSTEM
+};
+
+UCLASS()	//Blueprintable = ë¸”ë£¨ í”„ë¦°íŠ¸ì—ì„œ í™•ì¥ ê°€ëŠ¥
+class PRACTICEGAME_API APlayerCharacter
+	: public ACharacter,
+	public IWeaponTrailEffectProvider,
+	public ICharacterPublicInterface,
+	public ICharacterRenderingInterface
 {
 	GENERATED_BODY()
 
@@ -22,77 +38,268 @@ public:
 	// Sets default values for this character's properties
 	APlayerCharacter();
 
-private:
-	//µğ¹ö±× ¸Ş½ÃÁö Ãâ·Â Åä±Û
+	UPROPERTY(EditAnywhere)
+	bool bNormalAttackOverlap = true;
+
+protected:
+	//ë””ë²„ê·¸ ë©”ì‹œì§€ ì¶œë ¥ í† ê¸€
 	UPROPERTY(EditAnywhere)
 	bool bDebugEnabled = false;
-	//½ºÇÁ¸µ ¾ÏÀ» °¡Áö°í ÀÖÀ» ¸â¹ö¸¦ ¼±¾ğÇÑ´Ù
-	//¿¡µğÅÍ¿¡¼­ ¼öÁ¤ÀÌ °¡´ÉÇÏ´Ù
+
+	//ìŠ¤í”„ë§ ì•”ì„ ê°€ì§€ê³  ìˆì„ ë©¤ë²„ë¥¼ ì„ ì–¸í•œë‹¤
+	//ì—ë””í„°ì—ì„œ ìˆ˜ì •ì´ ê°€ëŠ¥í•˜ë‹¤
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<USpringArmComponent> mSpringArm;
 
-	//Ä«¸Ş¶ó ÄÄÆ÷³ÍÆ®¸¦ °¡Áö°í ÀÖÀ»  ¸â¹ö¸¦ ¼±¾ğÇÑ´Ù
-	//°ÔÀÓ ½ÇÇà Áß¿¡ º¼ ¼ö ÀÖ´Ù
+	//ì¹´ë©”ë¼ ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì§€ê³  ìˆì„  ë©¤ë²„ë¥¼ ì„ ì–¸í•œë‹¤
+	//ê²Œì„ ì‹¤í–‰ ì¤‘ì— ë³¼ ìˆ˜ ìˆë‹¤
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UCameraComponent>	mCamera;
 
-	//¾Ö´ÔÀÎ½ºÅÏ½º¸¦ ¹Ş¾ÆµÑ Æ÷ÀÎÅÍ
-	TObjectPtr<class UAnimInstancePlayer>	mAnimInst;
+	//ì• ë‹˜ì¸ìŠ¤í„´ìŠ¤ë¥¼ ë°›ì•„ë‘˜ í¬ì¸í„°
+	TObjectPtr<class UPlayerTemplateAnimInstance>	mAnimInst;
+
+	//ì /ì•„êµ°/ì¤‘ë¦½ì„ íŒë³„í•˜ê¸° ìœ„í•œ ì •ë³´
+	FGenericTeamId	mTeamID;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile")
 	TSubclassOf<AATestProjectile> mProjectileClass;
 
-	//ÄÉ¸¯ÅÍ »óÅÂ °ü¸®¸¦ À§ÇÑ ±¸Á¶Ã¼ÀÌ´Ù  ºñÆ®ÇÃ·¡±×·Î  ºñÆ®¿¬»êÀÚ¸¦ Áö¿øÇÑ´Ù
-	//8ºñÆ®ÀÌ±â ¶§¹®¿¡ ÃÖ´ë 8°³ÀÇ »óÅÂ¸¦ ÀúÀåÇÒ ¼ö ÀÖ´Ù
+	//ì¼€ë¦­í„° ìƒíƒœ ê´€ë¦¬ë¥¼ ìœ„í•œ êµ¬ì¡°ì²´ì´ë‹¤  ë¹„íŠ¸í”Œë˜ê·¸ë¡œ  ë¹„íŠ¸ì—°ì‚°ìë¥¼ ì§€ì›í•œë‹¤
+	//8ë¹„íŠ¸ì´ê¸° ë•Œë¬¸ì— ìµœëŒ€ 8ê°œì˜ ìƒíƒœë¥¼ ì €ì¥í•  ìˆ˜ ìˆë‹¤
 	FCharacterState	mCharacterState;
+
+	//ë¬´ê¸°ì˜ íŒŒí‹°í´ ì‹œìŠ¤í…œì´ ë¬´ì—‡ì¸ì§€ êµ¬ë³„í•œë‹¤
+	UPROPERTY(EditAnywhere)
+	ETrailAssetMode  mTrailAssetMode = ETrailAssetMode::PARTICLESYSTEM;
+	
+	//íƒ€ì´ë¨¸ ê´€ë ¨ ê¸°ëŠ¥ì„ ì¡°ì‘í•  í•¸ë“¤ëŸ¬ì´ë‹¤
+	FTimerHandle					mDashTimer;
+public:
+	FTimerHandle					mDashAfterImageTimerHandler;
+
+protected:		
+	bool			bIsRightMouseButtonPressed = false;
+
+	//íƒ€ê¹ƒì§€ë©´ì„ ì§€ì •í•˜ëŠ” ìŠ¤í‚¬ì´ í™œì„±í™” ì¤‘ì¸ì§€ë¥¼ ì²´í¬í•˜ëŠ” ë©¤ë²„
+	bool			mSelectingCastZone = false;
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<USoundWave>	mSfxDash;
+protected:
+	UPROPERTY(VisibleDefaultsOnly)
+	TArray<UBoxComponent*> mWeaponColBox;
+
+protected:
+	//ì™¼ì† ì˜¤ë¥¸ì† ë¬´ê¸° íŠ¸ë ˆì¼ íŒŒí‹°í´
+	TObjectPtr<UParticleSystem>		mTrailEffectL;
+	TObjectPtr<UParticleSystem>		mTrailEffectR;
+
+	//ì™¼ì† ì˜¤ë¥¸ì† ë¬´ê¸° íŠ¸ë ˆì¼ íŒŒí‹°í´ (ë‚˜ì´ì•„ê°€ë¼ì¸ ê²½ìš°)
+	TObjectPtr<UNiagaraSystem>		mTrailEffectNiagaraL;
+	TObjectPtr<UNiagaraSystem>		mTrailEffectNiagaraR;
+
+	//ì„ì‹œì˜ì—­ ìŠ¤í…ì‹¤ - ì–´í´ë£¨ì „ ì²˜ë¦¬ ì‹œ ì´ì „ ëŒ€ìƒë“¤ì„ ë°›ì•„ë‘ê¸° ìœ„í•¨
+	TArray<ICharacterRenderingInterface*>		mPrevDetectedActors;
+	
+	UPROPERTY(EditAnywhere)
+	FName	mDataKey;
+
+	TObjectPtr<UInventoryComponent>		mInventoryItemsComponent;
+	//ìŠ¤í‚¬ì»´í¬ë„ŒíŠ¸
+	TObjectPtr<UQuestComponent>		mQuestComponent;
+
+public:
+	UInventoryComponent* GetInventoryComponent() const
+	{
+		return mInventoryItemsComponent;
+	}
+	UQuestComponent* GetQuestComponent() const
+	{
+		return mQuestComponent;
+	}
+	
+public:
+	UpdateHealthDelegate	mOnHealthChange;
 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+public:
+	virtual void OnConstruction(const FTransform& Transform);
+
 private:
-	//ÀÔ·Â ¾×¼Ç¿¡ ÀÇÇØ ¹ÙÀÎµùÇÒ ÇÔ¼ö´Â
-	// ¹İµå½Ã void ¹İÈ¯Å¸ÀÔ
-	// const FInputActionValue& Value ÀÎÀÚ Å¸ÀÔÀ» ¼³Á¤ÇØ¾ß ÇÑ´Ù
+	//ì…ë ¥ ì•¡ì…˜ì— ì˜í•´ ë°”ì¸ë”©í•  í•¨ìˆ˜ëŠ”
+	// ë°˜ë“œì‹œ void ë°˜í™˜íƒ€ì…
+	// const FInputActionValue& Value ì¸ì íƒ€ì…ì„ ì„¤ì •í•´ì•¼ í•œë‹¤
+	void OnIAMoveTriggered(const FInputActionValue& Value);					//1.ì´ë™
+	void OnIAJumpStarted(const FInputActionValue& Value);					//2.ì í”„
+	void OnIAAttackStarted(const FInputActionValue& Value);					//3. ê³µê²©
+	void OnIAAttackTriggered(const FInputActionValue& Value);				//3b.ê³µê²©
+	void OnIACamRotateTriggered(const FInputActionValue& Value);			//4. ì¹´ë©”ë¼ ë¡œí…Œì´ì…˜
+	void OnIACharacterRotateTriggered(const FInputActionValue& Value);		//4b. + ìºë¦­í„° ë¡œí…Œì´ì…˜
+	void OnIACharacterRotateCompleted(const FInputActionValue& Value);		//4c. + ìºë¦­í„° ë¡œí…Œìµì…˜ ì¢…ë£Œ
+	void OnIADashStarted(const FInputActionValue& Value);					//5. ëŒ€ì‹œ
+	void OnIASprintTriggered(const FInputActionValue& Value);				//6. ìŠ¤í”„ë¦°íŠ¸ ì‹œì‘
+	void OnIASprintCompleted(const FInputActionValue& Value);				//6b. ìŠ¤í”„ë¦°íŠ¸ ì¢…ë£Œ
+	void OnIASpecialStarted(const FInputActionValue& Value);				//7. ìŠ¤í˜ì…œëŠ¥ë ¥
+	void OnIAPreviewThanCastStarted(const FInputActionValue& Value);		//8. ìœ„ì¹˜ì§€ì •ìŠ¤í‚¬ ì¤€ë¹„
+	void OnIAAcceptCastStarted(const FInputActionValue& Value);		//8b. ìœ„ì¹˜ì§€ì •ìŠ¤í‚¬ ìˆ˜ë½
+	void OnIACancelCastStarted(const FInputActionValue& Value);		//8c. ìœ„ì¹˜ì§€ì •ìŠ¤í‚¬ ì·¨ì†Œ
 
-	//1. ÀÌµ¿ÀÔ·Â::TriggeredÀ» Ã³¸®ÇÏ´Â ¹ÙÀÎµù ÇÔ¼ö
-	void OnIAMoveTriggered(const FInputActionValue& Value);
-	//2. Á¡ÇÁÀÔ·Â::StartedÀ» Ã³¸®ÇÏ´Â ¹ÙÀÎµù ÇÔ¼ö
-	void OnIAJumpStarted(const FInputActionValue& Value);
-	//3. °ø°İÀÔ·Â::StartedÀ» Ã³¸®ÇÏ´Â ¹ÙÀÎµù ÇÔ¼ö
-	void OnIAAttackStarted(const FInputActionValue& Value);
-	//3.b °ø°İÀÔ·Â::TriggeredÀ» Ã³¸®ÇÏ´Â ¹ÙÀÎµù ÇÔ¼ö (¿¬¼Ó°ø°İ)
-	void OnIAAttackTriggered(const FInputActionValue& Value);
-	//4. ¸¶¿ì½ºXY ¹× °ÔÀÓÆĞµå ¿À¸¥ÂÊ½æ½ºÆ½ XY ::Triggered ¸¦ Ã³¸®ÇÏ´Â ¹ÙÀÎµùÇÔ¼ö
-	void OnIACamRotateTriggered(const FInputActionValue& Value);
+	void OnIACleaveStarted(const FInputActionValue& Value);					//8. ë¶€ì±„ê¼´ë² ê¸°(í´ë¦¬ë¸Œ)
 
+	//UI íŒ¨ë„ ë‹¨ì¶•í‚¤ ë°”ì¸ë”©
+	void OnIAPlayerInfoPanelStarted(const FInputActionValue& Value);		//9. í”Œë ˆì´ì–´ ì •ë³´ íŒ¨ë„
+	void OnIASelectCharacterStarted(const FInputActionValue& Value);		//10. ì—‘í„° ì„ íƒ ì•¡ì…˜
+
+	void OnIAPanelSkillStarted(const FInputActionValue& Value);		//9. í”Œë ˆì´ì–´ ì •ë³´ íŒ¨ë„
+	void OnIAPanelInvStarted(const FInputActionValue& Value);		//10. ì—‘í„° ì„ íƒ ì•¡ì…˜
 protected:
-	//ÄÉ¸¯ÅÍ¸¦ Axis º¤ÅÍ·Î ScaleValue °­µµ·Î ÀÌµ¿ ½ÃÅ²´Ù.
-	//Ä³¸¯ÅÍ ±âº» ÀÌµ¿°ú °ü·ÃµÈ ºÎ°¡ÀûÀÎ ¿¬»êÀ» ¼öÇàÇÒ ¼ö ÀÖ´Ù
+	//ì¼€ë¦­í„°ë¥¼ Axis ë²¡í„°ë¡œ ScaleValue ê°•ë„ë¡œ ì´ë™ ì‹œí‚¨ë‹¤.
+	//ìºë¦­í„° ê¸°ë³¸ ì´ë™ê³¼ ê´€ë ¨ëœ ë¶€ê°€ì ì¸ ì—°ì‚°ì„ ìˆ˜í–‰í•  ìˆ˜ ìˆë‹¤
 	void MoveToAxis(const FVector& Axis, const float ScaleValue = 1.0f);
+	
+public:
+	virtual void NormalAttack();  //ë…¸í‹°íŒŒì´ì—ì„œ í˜¸ì¶œí•˜ê¸° ìœ„í•´ í¼ë¸”ë¦­:
+protected:
+	virtual void SpecialAttack();
+	virtual void CleaveAttack();
+
+	void Dash(float DashSpeed);
+	void RestoreGravity();
+	void Sprint();
+	void StopSprint();
+
+	virtual void MakePreviewCastZone();
+	virtual void CancelPreviewCastZone();
+	virtual void AcceptPreviewCastZone();
+	virtual void InitCastZoneSkill();
+
+	protected:
+		void AfterImageLoop();
+
+	/*Cone ëª¨ì–‘ì˜ ìŠ¤ìœ• íŠ¸ë ˆì´ìŠ¤ë¥¼ ì‹œí–‰í•˜ê³  ì˜ì—­ì•ˆì˜ ëª¬ìŠ¤í„°í´ë˜ìŠ¤ë“¤ì— í•œí•´ì„œ ë°ë¯¸ì§€ë¥¼ ê³„ì‚°í•œë‹¤
+	* ëª¨ë“  ì¶©ëŒì— íŒŒí‹°í´ê³¼ ì‚¬ìš´ë“œë¥¼ ìŠ¤í°í• ì§€ ê²°ì •í•  ìˆ˜ ìˆë‹¤.
+	* VFX, SFX ì—ì…‹ì„ ì „ë‹¬í•˜ì§€ ì•Šìœ¼ë©´ ìŠ¤í°í•˜ì§€ ì•ŠëŠ”ë‹¤
+	* bSpawnVFXEveryHit ì„ false ë¡œ ì „ë‹¬í•˜ë©´ ìºë¦­í„° location ì— VFX ë¥¼ í•œ ë²ˆ ìŠ¤í°í•œë‹¤
+	* bSpawnSFXEveryHit ì„ false ë¡œ ì „ë‹¬í•˜ë©´ ìºë¦­í„° location ì— SFX ë¥¼ í•œ ë²ˆ ìŠ¤í°í•œë‹¤
+	*/
+	virtual void RunSweepConeAndDamage(float Damage, float SphereSize, float SphereDistance, float AngleStartDistance, float InnerAngle, ECollisionChannel TraceChannel, UNiagaraSystem* VFXAsset = nullptr, bool bSpawnVFXOnHit = true, USoundBase* SFXAsset = nullptr, bool bSpawnSFXOnHit = true);
+	//ì‚¬ìš´ë“œ ì—ì…‹ ë‹¤ë¥¸ ì˜¤ë²„ë¡œë”© í•¨ìˆ˜
+	virtual void RunSweepConeAndDamage(float Damage, float SphereSize, float SphereDistance, float AngleStartDistance, float InnerAngle, ECollisionChannel TraceChannel, UParticleSystem* VFXAsset = nullptr, bool bSpawnVFXOnHit = true, USoundBase* SFXAsset = nullptr, bool bSpawnSFXOnHit = true);
 
 public:
-
-	//ÀÌµ¿ºÒ´É »óÅÂÀÎÁö È®ÀÎÇÑ´Ù, ÀÌ »óÅÂ¿¡¼­´Â ÀÌµ¿ °ü·Ã ÇàÀ§¸¦ ¸øÇÏµµ·Ï ¼³°èÇÑ´Ù
+	void SetPreviewCastActivation(bool NewSetup)
+	{
+		if(NewSetup != mSelectingCastZone)
+			mSelectingCastZone = NewSetup;
+	}
+	bool GetPreviewCastActivation()
+	{
+		return mSelectingCastZone;
+	}
+	//ì´ë™ë¶ˆëŠ¥ ìƒíƒœì¸ì§€ í™•ì¸í•œë‹¤, ì´ ìƒíƒœì—ì„œëŠ” ì´ë™ ê´€ë ¨ í–‰ìœ„ë¥¼ ëª»í•˜ë„ë¡ ì„¤ê³„í•œë‹¤
 	virtual bool IsCharacterImmobilized();
-	//°ø°İ°ú °°Àº ÁÖ¿ä ¾×¼Ç ÇàÀ§°¡ °¡´ÉÇÑ »óÅÂÀÎÁö ¹İÈ¯ÇÑ´Ù
+	//ê³µê²©ê³¼ ê°™ì€ ì£¼ìš” ì•¡ì…˜ í–‰ìœ„ê°€ ê°€ëŠ¥í•œ ìƒíƒœì¸ì§€ ë°˜í™˜í•œë‹¤
 	virtual bool CanCharacterAct();
-	//ÄÉ¸¯ÅÍ»óÅÂ ±¸Á¶Ã¼¸¦ ¹İÈ¯ÇÑ´Ù
-	FCharacterState* GetCharacterState();
+	//ì¼€ë¦­í„°ìƒíƒœ êµ¬ì¡°ì²´ë¥¼ ë°˜í™˜í•œë‹¤
+
+public:
+	FTimerHandle GetDashAfterImageTimerHandler()
+	{
+		return mDashAfterImageTimerHandler;
+	}
+
+	TArray<UBoxComponent*> GetWeaponColBox()
+	{
+		return mWeaponColBox;
+	}
+
+	FCharacterState& GetCharacterState()
+	{
+		return mCharacterState;
+	}
+
+	FCharacterState* GetCharacterStatePtr()
+	{
+		return &mCharacterState;
+	}
+
+	TSubclassOf<AATestProjectile> GetProjectileClass() const
+	{
+		return mProjectileClass;
+	}
+
+	ETrailAssetMode GetTrailAssetMode() const
+	{ 
+		return mTrailAssetMode; 
+	}
+
+	virtual UParticleSystem* GetLeftWeaponTrailEffectParticle() const override 
+	{ 
+		return mTrailEffectL.Get(); 
+	}
+	virtual UNiagaraSystem* GetLeftWeaponTrailEffectNiagara() const override 
+	{ 
+		return mTrailEffectNiagaraL.Get(); 
+	}
+
+	virtual UParticleSystem* GetRightWeaponTrailEffectParticle() const override 
+	{
+		return mTrailEffectR.Get(); 
+	}
+	virtual UNiagaraSystem* GetRightWeaponTrailEffectNiagara() const override 
+	{
+		return mTrailEffectNiagaraR.Get(); 
+	}
 
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
-
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
+	//ëª¨ë“  ì»´í¬ë„ŒíŠ¸ê°€ ì´ˆê¸°í™”ëœ í›„ í˜¸ì¶œëœë‹¤
+	virtual void PostInitializeComponents() override;
 	/*Called upon landing when falling, to perform actions based on the Hit result.Triggers the OnLanded event.
 		* Note that movement mode is still "Falling" during this event.Current Velocity value is the velocity at the time of landing.*/
 	virtual void Landed(const FHitResult& Hit) override;
-
 	/** Called when the character's movement enters falling */
 	virtual void Falling() override;
 	/** Called when character's jump reaches Apex. Needs CharacterMovement->bNotifyApex = true */
 	virtual void NotifyJumpApex() override;
+
+public:
+	void ApplyTrailEffect(bool bLeftHand, USkeletalMeshComponent* MeshComp, int32 CurrentTrackIndex);
+
+protected:
+		//ë¬´ê¸° ì¶©ëŒì²´ì˜ ì˜¤ë²„ë ™ ì´ë²¤íŠ¸ ì‹œ í˜¸ì¶œí•  ë¸ë¦¬ê²Œì´íŠ¸ í•¨ìˆ˜ë¥¼ ì •ì˜í•œë‹¤
+	UFUNCTION()
+	void OnWeaponOverlap(
+			UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void OnWeaponHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,	FVector NormalImpulse,	const FHitResult& HitResult);
+
+public:
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser);
+
+public:
+	virtual void SetGenericTeamId(const FGenericTeamId& TeamID);
+	virtual FGenericTeamId GetGenericTeamId() const;
+	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const;
+	
+	//ìŠ¤í…ì‹¤ íš¨ê³¼ë¥¼ ì¼œê³  ëˆë‹¤
+	virtual void EnableOutLine(bool Enable);
+	virtual void EnableOcclusion(bool Enable);
+
+	virtual void UpdateHPBar();
+	virtual void UpdateMPBar();
+
+	virtual void OnGetExp(int32 AddNumber);
+	virtual void LevelUp();
+
+	virtual void GenerateRandomInvItem();
 };
+
